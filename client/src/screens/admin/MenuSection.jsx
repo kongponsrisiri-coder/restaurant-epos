@@ -14,6 +14,7 @@ import {
   assertOk,
 } from '../../api';
 import { confirm } from '../../utils/confirm';
+import { useBackdropDismiss } from '../../utils/backdropGuard';
 
 // ── Add-option row (SEPOS-059) ────────────────────────────────────
 // Self-contained so the input's state is LOCAL. Previously the option-name
@@ -36,7 +37,7 @@ function OptionAdder({ onAdd }) {
   return (
     <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
       <input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey} placeholder="Option name" style={{ flex: '2 1 160px', minWidth: 0, padding: '13px 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16 }} />
-      <input value={price} onChange={e => setPrice(e.target.value)} onKeyDown={onKey} placeholder="+£ extra" type="number" step="0.01" style={{ flex: '1 1 90px', minWidth: 0, padding: '13px 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16 }} />
+      <input value={price} onChange={e => setPrice(e.target.value)} onKeyDown={onKey} placeholder="+£ extra" type="text" inputMode="decimal" step="0.01" style={{ flex: '1 1 90px', minWidth: 0, padding: '13px 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16 }} />
       <button onClick={submit} style={{ padding: '13px 20px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>Add</button>
     </div>
   );
@@ -168,7 +169,8 @@ export default function MenuSection() {
   const [subcategories, setSubcategories]   = useState([]);
   // SEPOS-MENU-COLOR-001 — order-screen button colour picker
   const [colorPick, setColorPick] = useState(null); // { type, id, current } | null
-  const MENU_COLORS = ['#dc2626','#fecaca','#f59e0b','#fde68a','#16a34a','#bbf7d0','#2563eb','#bfdbfe','#8b5cf6','#14b8a6','#C9A84C','#6b7280'];
+  const colorBackdrop = useBackdropDismiss(() => setColorPick(null));
+  const MENU_COLORS = ['#dc2626','#fecaca','#f59e0b','#fde68a','#16a34a','#bbf7d0','#2563eb','#bfdbfe','#8b5cf6','#14b8a6','#C9A84C','#6b7280','#ec4899','#fbcfe8','#ea580c','#fed7aa','#0ea5e9','#bae6fd','#84cc16','#d9f99d','#7c3aed','#ddd6fe','#0D1B3E','#a16207'];   // SEPOS-MENU-COLORS-002 (Korakot, 28 Aug) — doubled the palette
   const applyColor = async (color) => {
     const pick = colorPick; setColorPick(null);
     if (!pick) return;
@@ -351,6 +353,18 @@ export default function MenuSection() {
     try { assertOk(await updateMenuItem(item.id, { ...item, is_online: next })); }
     catch (err) { alert('Could not update — check connection.'); fetchMenu(); }
   };
+  // SEPOS-MENU-CHANNELS-001 — QR-table channel: is_qr NULL follows Online,
+  // explicit 0/1 overrides (alcohol at the table but off the collection page).
+  const toggleQr = async (item) => {
+    const eff = (item.is_qr ?? item.is_online ?? 1) ? 1 : 0;
+    const next = eff ? 0 : 1;
+    setMenu(prev => prev.map(cat => ({
+      ...cat,
+      items: (cat.items || []).map(it => it.id === item.id ? { ...it, is_qr: next } : it),
+    })));
+    try { assertOk(await updateMenuItem(item.id, { ...item, is_qr: next })); }
+    catch (err) { alert('Could not update — check connection.'); fetchMenu(); }
+  };
   const openModifiers   = async (item) => { setModifierItem(item); setActiveGroup(null); const [data, lib] = await Promise.all([getItemModifiers(item.id), getModifierLibrary()]); setModifiers(data); setLibrary(Array.isArray(lib) ? lib : []); };
   const refreshModifiers = async () => { const [data, lib] = await Promise.all([getItemModifiers(modifierItem.id), getModifierLibrary()]); setModifiers(data); setLibrary(Array.isArray(lib) ? lib : []); };
   // SEPOS-059 — create a reusable (library) group and auto-attach to this dish,
@@ -404,6 +418,58 @@ export default function MenuSection() {
     setLocalItems(newItems); setDragIndex(null); setDragOverIndex(null); saveSortOrder(newItems);
   }
   function handleDragEnd() { setDragIndex(null); setDragOverIndex(null); }
+
+  // SEPOS-ARRANGE-TOUCH-002 (Korakot, 10 Sep) — REAL drag-to-reorder by FINGER,
+  // not just mouse. HTML5 draggable never fires on touch; pointer events do, so
+  // one path drags for touch AND mouse. Drag starts from a GRIP handle only
+  // (touch-action:none on the grip), so touching a row body still SCROLLS the
+  // list. document.elementFromPoint finds the row under the finger/cursor.
+  const pointerDragRef = useRef({ id: null });
+  function commitReorder(dragId, dropId) {
+    if (dragId == null || dropId == null || dragId === dropId) return;
+    const from = localItems.findIndex(i => i.id === dragId);
+    const to   = localItems.findIndex(i => i.id === dropId);
+    if (from < 0 || to < 0) return;
+    const newItems = [...localItems]; const [moved] = newItems.splice(from, 1); newItems.splice(to, 0, moved);
+    setLocalItems(newItems); saveSortOrder(newItems);
+  }
+  function rowIdAt(x, y) {
+    const el = document.elementFromPoint(x, y);
+    const row = el && el.closest ? el.closest('[data-reorder-id]') : null;
+    return row ? Number(row.getAttribute('data-reorder-id')) : null;
+  }
+  function startPointerDrag(e, item) {
+    e.preventDefault(); e.stopPropagation();
+    pointerDragRef.current = { id: item.id };
+    setDragIndex(item.id);
+    const onMove = (ev) => { if (ev.cancelable) ev.preventDefault(); setDragOverIndex(rowIdAt(ev.clientX, ev.clientY)); };
+    const onUp = (ev) => {
+      commitReorder(pointerDragRef.current.id, rowIdAt(ev.clientX, ev.clientY));
+      pointerDragRef.current = { id: null };
+      setDragIndex(null); setDragOverIndex(null);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+    };
+    document.addEventListener('pointermove', onMove, { passive: false });
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+  }
+  // SEPOS-ARRANGE-TOUCH-001 — HTML5 drag never fires on a touchscreen till, so
+  // the item reorder was mouse-only (categories + sub-cats already use ◀▶ tap).
+  // ▲▼ swaps an item with its visible neighbour — touch + mouse, filter-safe.
+  function moveItem(item, delta) {
+    const di = displayItems.findIndex(i => i.id === item.id);
+    const dj = di + delta;
+    if (dj < 0 || dj >= displayItems.length) return;
+    const neighbourId = displayItems[dj].id;
+    const newItems = [...localItems];
+    const a = newItems.findIndex(i => i.id === item.id);
+    const b = newItems.findIndex(i => i.id === neighbourId);
+    if (a < 0 || b < 0) return;
+    [newItems[a], newItems[b]] = [newItems[b], newItems[a]];
+    setLocalItems(newItems); saveSortOrder(newItems);
+  }
   async function saveSortOrder(items) {
     // Use the api.js helper (native-safe) — a raw fetch from the Sunmi WebView
     // silently fails, so the drag reorder never persisted and reverted on reload.
@@ -698,13 +764,26 @@ export default function MenuSection() {
       )}
       {displayItems.length === 0 ? <div style={{ textAlign: 'center', color: '#bbb', marginTop: 60 }}>{subFilter == null ? 'No items yet — click "+ Add Item" or use 🤖 AI Scanner' : 'No dishes in this sub-category.'}</div> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {displayItems.map((item) => {
+          {displayItems.map((item, di) => {
             const subcat = subcategories.find(s => s.id === item.subcategory_id);
             const isDragging = dragIndex === item.id; const isOver = dragOverIndex === item.id;
+            const upDownBtn = { width: 38, height: 26, borderRadius: 7, border: '1.5px solid #C9A84C', background: '#FBF4DF', color: '#9A7B1F', fontSize: 13, fontWeight: 800, cursor: 'pointer', lineHeight: 1, touchAction: 'manipulation' };
             return (
-              <div key={item.id} draggable onDragStart={e => handleDragStart(e, item)} onDragOver={e => handleDragOver(e, item)} onDrop={e => handleDrop(e, item)} onDragEnd={handleDragEnd}
-                style={{ background: 'white', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : '0 1px 4px rgba(0,0,0,0.08)', opacity: isDragging ? 0.5 : 1, border: isOver ? '2px solid #3b82f6' : '2px solid transparent', cursor: 'grab' }}>
-                <div style={{ color: '#ccc', fontSize: 18, cursor: 'grab', userSelect: 'none', flexShrink: 0 }}><div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{[0,1,2].map(r => <div key={r} style={{ display: 'flex', gap: 3 }}><div style={{ width: 4, height: 4, borderRadius: '50%', background: '#ccc' }} /><div style={{ width: 4, height: 4, borderRadius: '50%', background: '#ccc' }} /></div>)}</div></div>
+              <div key={item.id} data-reorder-id={item.id}
+                style={{ background: 'white', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : '0 1px 4px rgba(0,0,0,0.08)', opacity: isDragging ? 0.5 : 1, border: isOver ? '2px solid #3b82f6' : '2px solid transparent' }}>
+                {/* SEPOS-ARRANGE-TOUCH-002 — GRIP handle: press-and-drag by finger OR mouse to
+                    reorder (pointer events). Only the grip has touch-action:none, so touching the
+                    rest of the row still scrolls the list. ▲▼ buttons remain as the tap alternative. */}
+                <div onPointerDown={e => startPointerDrag(e, item)}
+                  title="Drag to reorder"
+                  style={{ flexShrink: 0, width: 30, alignSelf: 'stretch', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#b8b8b8', fontSize: 20, cursor: 'grab', touchAction: 'none', userSelect: 'none' }}>
+                  ⋮⋮
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }} onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+                  <button onClick={e => { e.stopPropagation(); moveItem(item, -1); }} disabled={di === 0} title="Move up" style={{ ...upDownBtn, opacity: di === 0 ? 0.3 : 1, cursor: di === 0 ? 'default' : 'pointer' }}>▲</button>
+                  <button onClick={e => { e.stopPropagation(); moveItem(item, 1); }} disabled={di === displayItems.length - 1} title="Move down" style={{ ...upDownBtn, opacity: di === displayItems.length - 1 ? 0.3 : 1, cursor: di === displayItems.length - 1 ? 'default' : 'pointer' }}>▼</button>
+                </div>
                 <div style={{ flex: 1, opacity: item.is_available ? 1 : 0.5 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--brand-primary, #1a1a2e)' }}>{item.name}</div>
                   {item.name_alt && <div style={{ fontSize: 12, color: 'var(--brand-accent,#C9A84C)', marginTop: 1 }}>{item.name_alt}</div>}
@@ -715,6 +794,9 @@ export default function MenuSection() {
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }} onMouseDown={e => e.stopPropagation()}>
                   <button onClick={e => { e.stopPropagation(); toggleAvailable(item); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: item.is_available ? '#dcfce7' : '#fee2e2', color: item.is_available ? '#14532d' : '#991b1b' }}>{item.is_available ? 'Available' : 'Off menu'}</button>
                   <button onClick={e => { e.stopPropagation(); toggleOnline(item); }} title={item.is_online === 0 ? 'Hidden from online ordering' : 'Visible on online ordering'} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: item.is_online === 0 ? '#e5e7eb' : '#dbeafe', color: item.is_online === 0 ? '#374151' : '#1e40af' }}>{item.is_online === 0 ? '🌐 Hidden' : '🌐 Online'}</button>
+                  {(() => { const qeff = (item.is_qr ?? item.is_online ?? 1) ? 1 : 0; return (
+                  <button onClick={e => { e.stopPropagation(); toggleQr(item); }} title={qeff ? 'Visible on QR table ordering' : 'Hidden from QR table ordering'} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: qeff ? '#f3e8ff' : '#e5e7eb', color: qeff ? '#7e22ce' : '#374151' }}>{qeff ? '📱 QR' : '📱 QR hidden'}</button>
+                  ); })()}
                   <button onClick={e => { e.stopPropagation(); openModifiers(item); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fef9c3', color: '#713f12', fontWeight: 600, fontSize: 12 }}>Options</button>
                   <button onClick={e => { e.stopPropagation(); openEditForm(item); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}>Edit</button>
                   <button onClick={e => { e.stopPropagation(); setColorPick({ type: 'item', id: item.id, current: item.color }); }} title="Card colour on the order screen" style={{ padding: '6px 10px', borderRadius: 8, border: item.color ? 'none' : '1px solid #ddd', cursor: 'pointer', background: item.color || '#fff', fontWeight: 600, fontSize: 12 }}>🎨</button>
@@ -789,7 +871,7 @@ export default function MenuSection() {
                   </div>
                 )}
               </div>
-              <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Price (£) *</label><input value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} type="number" step="0.01" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
+              <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Price (£) *</label><input value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} type="text" inputMode="decimal" step="0.01" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>VAT rate</label><select value={form.vat_rate ?? 20} onChange={e => setForm({ ...form, vat_rate: Number(e.target.value) })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}><option value={20}>20% (standard)</option><option value={5}>5% (reduced)</option><option value={0}>0% (zero rated)</option></select><div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>Prices are VAT-inclusive — this affects the VAT breakdown on bills + reports.</div></div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Kitchen course</label><select value={form.default_course ?? ''} onChange={e => setForm({ ...form, default_course: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}><option value="">Inherit from category</option><option value={1}>Starter</option><option value={2}>Main</option><option value={3}>Dessert</option><option value={4}>Extra</option></select><div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>Set this for a mixed category (e.g. a Lunch menu) so this dish always prints on the right course — otherwise it follows the category.</div></div>
               {/* SEPOS-STATION-003 — per-dish printer station override. Same
@@ -856,7 +938,7 @@ export default function MenuSection() {
       )}
       {/* SEPOS-MENU-COLOR-001 — swatch picker */}
       {colorPick && (
-        <div onClick={() => setColorPick(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div {...colorBackdrop} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 20, width: 320, maxWidth: '92vw' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>Button colour</div>
             <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>Shown on the order screen — text flips black/white automatically.</div>

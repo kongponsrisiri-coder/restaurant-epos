@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('siamepos', {
   // button reads it via the main process so paste works even when keyboard
   // forwarding is flaky.
   readClipboard: () => ipcRenderer.invoke('read-clipboard'),
+  // SEPOS-WIZARD-INPUT-001 — wizard 'Load from file' button.
+  pickConfigFile: () => ipcRenderer.invoke('pick-config-file'),
   // SEPOS-RESET-001 — wipe config.json + local DB and relaunch to the wizard
   // (hand this install to a different client). Triggered by the hidden reset.
   resetConfig: () => ipcRenderer.invoke('reset-config'),

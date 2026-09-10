@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote, getVoucher, redeemVoucher, getOrderDeposit, getOrderDepositApplied, createDeposit } from '../api';
 import AmountInput from '../components/AmountInput';
-import { unapplyOrderDeposit } from '../api';
+import { unapplyOrderDeposit, pushCfdState, moveOrderItem, getTables } from '../api';
 import CodeScanButton from '../components/CodeScanButton';
 
 // SEPOS-MENU-COLOR-001 — auto black/white text on a coloured button.
@@ -75,6 +75,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   const [miscPopup, setMiscPopup] = useState(null); // SEPOS-MISC-001 — off-menu / special open item
   const [voidPopup, setVoidPopup] = useState(null);
   const [resendPopup, setResendPopup] = useState(null);
+  const [movePopup, setMovePopup] = useState(null);   // SEPOS-ITEM-MOVE-001 — {item, tables}
+  // SEPOS-ITEM-NOTE-TAP-001 — tap an unsent basket line to add/edit its note.
+  const [noteModal, setNoteModal] = useState(null);   // { line, text }
+  // SEPOS-RESEND-002 — order-level resend: tick items, default plain Reprint.
+  const [resendAllModal, setResendAllModal] = useState(null); // { items, ticked:Set, reason }
   const [showBill, setShowBill] = useState(false);
   // SEPOS-046z — React modal for discounts. The old flow used
   // window.prompt(), which is disabled in Electron, so discounts
@@ -107,13 +112,21 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   // Persist the un-sent cart per order so it survives leaving the table and
   // coming back (was lost on unmount). Cleared automatically once the cart
   // empties — i.e. after a successful Send.
+  // SEPOS-DRAFT-BADGE — alongside the cart itself, keep a tiny per-TABLE
+  // marker so the floor map can show a ✏️ on tables holding an unsent draft
+  // on THIS device (the cart key itself may be order-keyed, which the map
+  // can't resolve — phantom 0-item orders are filtered out of its feed).
   useEffect(() => {
     if (!cartKey) return;
     try {
       if (cart.length) localStorage.setItem(cartKey, JSON.stringify(cart));
       else localStorage.removeItem(cartKey);
+      if (tableId) {
+        if (cart.length) localStorage.setItem(`sepos_draft_table_${tableId}`, '1');
+        else localStorage.removeItem(`sepos_draft_table_${tableId}`);
+      }
     } catch {}
-  }, [cart, cartKey]);
+  }, [cart, cartKey, tableId]);
   const fetchOrder = async () => {
     const seq = ++fetchSeqRef.current;
     const orderData = await getOrder(orderId);
@@ -570,9 +583,66 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
         items: [{ ...item, notes: noteWithReason }],
         course: item.course || 0,
         popupWin,
+        sentBy: staff?.name,
       });
     } catch (e) {
       console.warn('[resend] print failed:', e?.message);
+      try { popupWin?.close(); } catch {}
+    }
+  };
+
+  // SEPOS-ITEM-NOTE-TAP-001 — save the note typed in the tap-a-line modal onto
+  // that exact cart line (object identity — lines live in this state array).
+  const saveLineNote = () => {
+    if (!noteModal) return;
+    const text = (noteModal.text || '').trim().slice(0, 200);
+    setCart(prev => prev.map(l => (l === noteModal.line ? { ...l, item_note: text || undefined } : l)));
+    setNoteModal(null);
+  };
+
+  // SEPOS-RESEND-002 — resend the whole order (or a ticked subset) without the
+  // KDS/course-call flow. Default 'Reprint' = paper only, no DB write, no stock
+  // effect; picking a real reason routes through the existing /resend endpoint
+  // (records reason, Remake depletes stock — SEPOS-024/031/032 unchanged).
+  const openResendAll = () => {
+    // SEPOS-RESEND-003 (Korakot 19 Aug): ANY sent item qualifies — the old
+    // is_fired gate meant venues that hadn't called a course yet had no
+    // resend at all ("how they can call if there is not order in the
+    // kitchen"). Sent = it's on a ticket somewhere; that's what reprints.
+    const items = existingItems.filter(i => !i.voided && i.id > 0);
+    if (!items.length) return;
+    setResendAllModal({ items, ticked: new Set(items.map(i => i.id)), reason: 'Reprint' });
+  };
+  const confirmResendAll = async () => {
+    if (!resendAllModal) return;
+    const { items, ticked, reason } = resendAllModal;
+    setResendAllModal(null);
+    const picked = items.filter(i => ticked.has(i.id));
+    if (!picked.length) return;
+    const kitchenPicked = picked.filter(i => !i.is_bar);
+    const barPicked     = picked.filter(i => i.is_bar);
+    const popupWin = (kitchenPicked.length && !settings?.printer_kitchen_ip && !window.siamepos?.isElectron && !isNativeApp())
+      ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
+    if (reason !== 'Reprint') {
+      setOrder(prev => prev ? { ...prev, items: (prev.items || []).map(i =>
+        ticked.has(i.id) ? { ...i, status: 'cooking' } : i) } : prev);
+      try {
+        assertOk(await resendToKitchen(orderId, picked.map(i => i.id), reason));
+      } catch (e) {
+        try { popupWin?.close(); } catch {}
+        alert('Resend failed: ' + (e?.message || 'unknown'));
+        fetchOrder();
+        return;
+      }
+      fetchOrder();
+    }
+    const tag = reason === 'Reprint' ? '🔄 RESEND' : `🔄 RESEND [${reason}]`;
+    const mark = (arr) => arr.map(i => ({ ...i, notes: `${tag}${i.notes ? ' | ' + i.notes : ''}` }));
+    try {
+      if (kitchenPicked.length) await printFullOrderTicket({ order: { ...order }, items: mark(kitchenPicked), popupWin, sentBy: staff?.name });
+      if (barPicked.length)     await printBarOrderTicket({ order: { ...order }, items: mark(barPicked), popupWin: null, sentBy: staff?.name });
+    } catch (e) {
+      console.warn('[resend-all] print failed:', e?.message);
       try { popupWin?.close(); } catch {}
     }
   };
@@ -585,6 +655,21 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
     const note = String(text || '').trim();
     setOrder(prev => prev ? { ...prev, customer_note: note } : prev);
     assertOk(await saveOrderNote(orderId, note));
+  };
+
+  // SEPOS-BACK-EVERYWHERE-001 (Korakot, 24 Aug) — shared "← Back" handler.
+  // Used by the menu pane AND the mobile Order tab: sending auto-switches a
+  // narrow screen to the Order tab, whose header had no Back — staff were
+  // stranded after every send unless they knew to tap the Menu tab first.
+  const backToFloor = async () => {
+    // SEPOS-046z — don't auto-cancel while a send is in flight:
+    // the items it would judge "empty" may be landing right now.
+    if (!sendBusy) {
+      const allVoided = existingItems.length > 0 && existingItems.every(i => i.voided);
+      const isEmpty = existingItems.length === 0 && cart.length === 0;
+      if (allVoided || isEmpty) await payOrder(orderId, 0, 'cancelled');
+    }
+    onClose();
   };
 
   const sendOrder = async () => {
@@ -661,8 +746,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
       // gap in printService). sendOrder doesn't await these — UI is unblocked.
       const orderSnap = order; // capture before any async state changes
       Promise.resolve()
-        .then(() => hasKitchen ? printFullOrderTicket({ order: orderSnap, items: justAdded, popupWin: null }) : null)
-        .then(() => hasBar     ? printBarOrderTicket({ order: orderSnap, items: justAdded, popupWin: barWin }) : null)
+        .then(() => hasKitchen ? printFullOrderTicket({ order: orderSnap, items: justAdded, popupWin: null, sentBy: staff?.name }) : null)
+        .then(() => hasBar     ? printBarOrderTicket({ order: orderSnap, items: justAdded, popupWin: barWin, sentBy: staff?.name }) : null)
         .catch(e => console.error('[sendOrder] print chain error:', e));
 
       // No success popup — the items are already in the Order Summary and the
@@ -812,6 +897,39 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   const activeCatIsBar = !!menu.find(c => c.id === activeCategory)?.is_bar;
   const existingItems = order?.items || [];
 
+  // SEPOS-CFD-001 — push the live order to the customer-facing display relay
+  // whenever it changes (sent items + unsent cart, running total). Fire-and-
+  // forget — a failed push never affects the till. The second screen (a browser
+  // on <till-url>/#display) polls this. Idle/branding is pushed by LoginScreen
+  // and on unmount below.
+  useEffect(() => {
+    const cfdItems = [
+      ...existingItems.filter(i => !i.voided).map(i => ({ name: i.name, qty: Number(i.quantity) || 1, price: Number(i.unit_price) || 0 })),
+      ...cart.map(c => ({ name: c.name, qty: Number(c.quantity) || 1, price: Number(c.price ?? c.unit_price) || 0 })),
+    ];
+    const table = order?.table_name || (order?.table_number != null ? `Table ${order.table_number}` : '');
+    if (cfdItems.length === 0) {
+      pushCfdState({ mode: 'idle', restaurant_name: settings.company_name || settings.restaurant_name, logo: settings.brand_logo || settings.company_logo }).catch(() => {});
+      return;
+    }
+    pushCfdState({
+      mode: 'order',
+      restaurant_name: settings.company_name || settings.restaurant_name,
+      logo: settings.brand_logo || settings.company_logo,
+      order: {
+        table,
+        items: cfdItems,
+        subtotal,
+        discount: discountAmount || 0,
+        service: serviceChargeAmount || 0,
+        total: orderTotal,
+      },
+    }).catch(() => {});
+  }, [subtotal, orderTotal, serviceChargeAmount, discountAmount, existingItems, cart, order, settings]);
+
+  // Clear the customer display back to branding when the cashier leaves the order.
+  useEffect(() => () => { pushCfdState({ mode: 'idle', restaurant_name: settings.company_name || settings.restaurant_name, logo: settings.brand_logo || settings.company_logo }).catch(() => {}); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Menu navigation (redesign): category buttons → sub-category tabs ──────────
   // Categories are big wrapping buttons; a category with sub-cats shows a tab
   // strip (no big "All" list) and the first tab auto-selects. Items filed under
@@ -862,6 +980,40 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
     setArrangeItems(prev => { const a = [...prev]; const [m] = a.splice(arrangeDrag, 1); a.splice(dropIdx, 0, m); return a; });
     setArrangeDrag(null);
   };
+
+  // SEPOS-ARRANGE-TOUCH-002 (Korakot, 10 Sep) — arrange menu buttons by FINGER,
+  // not just mouse. HTML5 draggable never fires on touch; pointer events do. Uses
+  // a ref for the source index (no stale closure) and elementFromPoint to find the
+  // card under the finger/cursor. Only active in arrangeMode, so normal ordering
+  // taps + scroll are untouched.
+  const arrangeDragRef = useRef(null);
+  const startArrangeDrag = (e, gridIdx) => {
+    e.preventDefault(); e.stopPropagation();
+    arrangeDragRef.current = gridIdx; setArrangeDrag(gridIdx);
+    const idxAt = (x, y) => { const el = document.elementFromPoint(x, y); const c = el && el.closest ? el.closest('[data-arrange-idx]') : null; return c ? Number(c.getAttribute('data-arrange-idx')) : null; };
+    const onMove = (ev) => { if (ev.cancelable) ev.preventDefault(); };
+    const onUp = (ev) => {
+      const from = arrangeDragRef.current; const to = idxAt(ev.clientX, ev.clientY);
+      if (from != null && to != null && from !== to) setArrangeItems(prev => { const a = [...prev]; const [m] = a.splice(from, 1); a.splice(to, 0, m); return a; });
+      setArrangeDrag(null); arrangeDragRef.current = null;
+      document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); document.removeEventListener('pointercancel', onUp);
+    };
+    document.addEventListener('pointermove', onMove, { passive: false });
+    document.addEventListener('pointerup', onUp); document.addEventListener('pointercancel', onUp);
+  };
+  // SEPOS-ARRANGE-TOUCH-001 — HTML5 drag-and-drop never fires on a touchscreen
+  // (a till IS a touchscreen), so dragging to reorder was mouse-only. Tap ◀ / ▶
+  // moves an item one slot — works on touch AND mouse (drag kept for desktop).
+  const moveArrangeItem = (idx, delta) => {
+    setArrangeItems(prev => {
+      const j = idx + delta;
+      if (j < 0 || j >= prev.length) return prev;
+      const a = [...prev];
+      const [m] = a.splice(idx, 1);
+      a.splice(j, 0, m);
+      return a;
+    });
+  };
   const saveArrange = async () => {
     if (arrangeSaving) return;
     setArrangeSaving(true);
@@ -892,6 +1044,42 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   // ── Sandy: Badge count — total items in cart + existing sent items ──
   const badgeCount = cart.reduce((sum, i) => sum + i.quantity, 0) +
     existingItems.filter(i => !i.voided).reduce((sum, i) => sum + i.quantity, 0);
+
+  // SEPOS-ITEM-MOVE-001 — move one sent line to another table. The server
+  // holds the money guards (no payments on the bill, never QR, never voided);
+  // this UI just picks the destination and confirms.
+  const handleMoveItem = async (item) => {
+    try {
+      const t = await getTables();
+      const tables = (Array.isArray(t) ? t : [])
+        .filter(x => !x.is_takeaway && Number(x.id) !== Number(order?.table_id));
+      if (tables.length === 0) { alert('No other table to move to.'); return; }
+      setMovePopup({ item, tables });
+    } catch { alert('Could not load the table list — check connection.'); }
+  };
+  const confirmMoveItem = async (table) => {
+    const item = movePopup?.item;
+    if (!item) return;
+    const label = (table.name && String(table.name).trim()) || `Table ${table.table_number}`;
+    const discWarn = order?.discount_type
+      ? '\n\nThis bill has a discount — the item joins the other table at full price.' : '';
+    if (!window.confirm(`Move ${item.quantity}× ${item.name} to ${label}?${discWarn}`)) return;
+    setMovePopup(null);
+    try {
+      assertOk(await moveOrderItem(item.id, table.id));
+      fetchOrder();
+    } catch (e) {
+      alert('Move failed: ' + (e?.message || 'unknown'));
+      fetchOrder();
+    }
+  };
+  const MoveButton = ({ item }) => (
+    <button onClick={() => handleMoveItem(item)} style={{
+      background: '#e0e7ff', border: 'none', borderRadius: 4,
+      padding: '2px 6px', cursor: 'pointer', color: '#4338ca',
+      fontSize: 10, fontWeight: 700
+    }}>⇄ MOVE</button>
+  );
 
   // Reusable DISC button
   const DiscButton = ({ item }) => (
@@ -962,16 +1150,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             background: 'white', padding: '14px 20px', borderBottom: '1px solid #eee',
             display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0
           }}>
-            <button onClick={async () => {
-              // SEPOS-046z — don't auto-cancel while a send is in flight:
-              // the items it would judge "empty" may be landing right now.
-              if (!sendBusy) {
-                const allVoided = existingItems.length > 0 && existingItems.every(i => i.voided);
-                const isEmpty = existingItems.length === 0 && cart.length === 0;
-                if (allVoided || isEmpty) await payOrder(orderId, 0, 'cancelled');
-              }
-              onClose();
-            }} style={{
+            <button onClick={backToFloor} style={{
               background: '#f0f0f0', border: 'none', borderRadius: 10,
               padding: '10px 18px', cursor: 'pointer', fontWeight: 700, fontSize: 15
             }}>
@@ -1205,17 +1384,34 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px' }}>
                 {/* Category buttons — wrap to multiple rows so every category is visible */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: subTabs.length ? 12 : 18 }}>
+                {/* SEPOS-FERN-POLISH-001 — compacted (was 12px/26px @ fs17): after
+                    the Fern menu flatten a venue can carry 25+ top-level
+                    categories, and at the old size the category grid dwarfed
+                    the menu buttons below it. */}
+                {/* SEPOS-CAT-GRID-001 (Fern, 24 Aug) — uniform grid, not ragged
+                    per-name widths: every button the same size, slightly smaller,
+                    so 20+ categories read as tidy rows. Long names ellipsise. */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(118px, 1fr))', gap: 8, marginBottom: subTabs.length ? 12 : 16 }}>
                   {menu.map(cat => {
                     const active = activeCategory === cat.id;
                     return (
-                      <button key={cat.id} onClick={() => selectCategory(cat)} style={{
-                        padding: '12px 26px', borderRadius: 14, cursor: 'pointer', fontWeight: 800, fontSize: 17, whiteSpace: 'nowrap',
+                      <button key={cat.id} onClick={() => selectCategory(cat)} title={cat.name} style={{
+                        padding: '6px 10px', minHeight: 40, borderRadius: 10, cursor: 'pointer', fontWeight: active ? 800 : 700, fontSize: 13,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
                         border: active ? 'none' : (cat.color ? `1.5px solid ${cat.color}` : '1.5px solid #E7E2D6'),
                         background: cat.color ? (active ? cat.color : cat.color + '33') : (active ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary,#0D1B3E)') : '#fff'),
                         color: cat.color ? (active ? textOn(cat.color) : 'var(--brand-primary, #1a1a2e)') : (active ? '#fff' : 'var(--brand-primary, #1a1a2e)'),
-                        boxShadow: cat.color && active ? '0 0 0 3px rgba(13,27,62,.35)' : 'none' }}>
-                        {cat.name}{cat.is_bar ? ' 🍹' : ''}
+                        /* Korakot 24 Aug: the selected ring was 35%-alpha navy — read as a faint
+                           grey smudge on coloured buttons. Full-strength navy ring now; navy-filled
+                           (uncoloured) actives get the gold accent ring so they pop off their own bg. */
+                        boxShadow: active ? (cat.color ? '0 0 0 3px var(--brand-primary,#0D1B3E)' : '0 0 0 3px var(--brand-accent,#C9A84C)') : 'none' }}>
+                        {/* Korakot 24 Aug: wrap long names to a 2nd line instead of "…" —
+                            clamp lives on an inner span so the flex button still centres
+                            one-line names vertically. Same-row buttons share height (grid). */}
+                        <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden', textAlign: 'center', wordBreak: 'break-word', lineHeight: 1.25 }}>
+                          {cat.name}{cat.is_bar ? ' 🍹' : ''}
+                        </span>
                       </button>
                     );
                   })}
@@ -1230,11 +1426,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       const active = activeSubcat === sub.id;
                       return (
                         <button key={sub.id} onClick={() => setActiveSubcat(sub.id)} style={{
-                          padding: '9px 18px', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: 14,
+                          padding: '9px 18px', borderRadius: 20, cursor: 'pointer', fontWeight: active ? 800 : 700, fontSize: 14,
                           border: active ? 'none' : (sub.color ? `1px solid ${sub.color}` : '1px solid #E7E2D6'),
                           background: sub.color ? (active ? sub.color : sub.color + '33') : (active ? 'var(--brand-accent,#C9A84C)' : '#fff'),
                           color: sub.color ? (active ? textOn(sub.color) : 'var(--brand-primary, #1a1a2e)') : (active ? '#fff' : '#7C766A'),
-                          boxShadow: sub.color && active ? '0 0 0 3px rgba(13,27,62,.35)' : 'none' }}>
+                          boxShadow: active ? '0 0 0 3px var(--brand-primary,#0D1B3E)' : 'none' }}>
                           {sub.name}
                         </button>
                       );
@@ -1245,7 +1441,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                 {/* SEPOS-ORDER-ARRANGE — reorder the menu right here (manager-gated). */}
                 {!searchQ && (arrangeMode ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '10px 14px', background: '#FBF7EC', border: '1.5px solid #C9A84C', borderRadius: 12 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#9A7B1F' }}>⇅ Drag dishes to reorder {menu.find(c => c.id === activeCategory)?.name}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#9A7B1F' }}>Tap ◀ ▶ to move dishes in {menu.find(c => c.id === activeCategory)?.name}</span>
                     <div style={{ flex: 1 }} />
                     <button onClick={cancelArrange} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #ddd', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>Cancel</button>
                     <button onClick={saveArrange} disabled={arrangeSaving} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--brand-primary,#0D1B3E)', color: '#fff', cursor: arrangeSaving ? 'wait' : 'pointer', fontWeight: 800, fontSize: 13 }}>{arrangeSaving ? 'Saving…' : '✓ Done'}</button>
@@ -1255,26 +1451,41 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     <button onClick={openArrange} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #E7E2D6', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13, color: '#7C766A' }}>⇅ Arrange menu</button>
                   </div>
                 ))}
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 10 }}>
+                {/* Korakot 24 Aug: denser dish grid — auto-fit ~172px columns gives
+                    ~6 per row on a till screen (was a fixed 4), so big menus need far
+                    less scrolling. Cards shrink a step but stay clearly bigger than
+                    the category chips; phones keep 2-up. */}
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(172px, 1fr))', gap: 8 }}>
                   {(arrangeMode ? arrangeItems : dishesToShow).map((item, gridIdx) => {
                     const inCart = cart.filter(c => c.menu_item_id === item.id);
                     const totalQty = inCart.reduce((s, c) => s + c.quantity, 0);
                     return (
                       <div key={item.id}
-                        draggable={arrangeMode}
+                        data-arrange-idx={gridIdx}
                         onClick={arrangeMode ? undefined : () => handleItemClick(item)}
-                        onDragStart={arrangeMode ? () => setArrangeDrag(gridIdx) : undefined}
-                        onDragOver={arrangeMode ? (e) => e.preventDefault() : undefined}
-                        onDrop={arrangeMode ? (e) => { e.preventDefault(); onArrangeDrop(gridIdx); } : undefined}
-                        style={{ background: item.color || '#fff', borderRadius: 12, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : (item.color ? item.color : '#E7E2D6')}`, padding: '10px 12px', cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 56, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
+                        onPointerDown={arrangeMode ? (e) => startArrangeDrag(e, gridIdx) : undefined}
+                        style={{ background: item.color || '#fff', borderRadius: 12, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : (item.color ? item.color : '#E7E2D6')}`, padding: '8px 10px', cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 48, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1, touchAction: arrangeMode ? 'none' : undefined }}>
                         {/* SEPOS-MENU-COMPACT-001 — no price on the card, half-height row layout */}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 15, fontWeight: 700, color: item.color ? textOn(item.color) : 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: item.color ? textOn(item.color) : 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
                           <AllergenChips list={allergensByItemId[item.id]} />
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', flex: 'none' }}>
                           {arrangeMode ? (
-                            <span style={{ color: '#C9A84C', fontSize: 20, fontWeight: 800, cursor: 'grab' }} title="Drag to reorder">⣿</span>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); moveArrangeItem(gridIdx, -1); }}
+                                disabled={gridIdx === 0}
+                                title="Move earlier"
+                                style={{ width: 44, height: 44, borderRadius: 10, border: '1.5px solid #C9A84C', background: gridIdx === 0 ? '#F4F1EA' : '#FBF4DF', color: '#9A7B1F', fontSize: 20, fontWeight: 800, cursor: gridIdx === 0 ? 'default' : 'pointer', opacity: gridIdx === 0 ? 0.35 : 1, touchAction: 'manipulation' }}
+                              >◀</button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); moveArrangeItem(gridIdx, 1); }}
+                                disabled={gridIdx === arrangeItems.length - 1}
+                                title="Move later"
+                                style={{ width: 44, height: 44, borderRadius: 10, border: '1.5px solid #C9A84C', background: gridIdx === arrangeItems.length - 1 ? '#F4F1EA' : '#FBF4DF', color: '#9A7B1F', fontSize: 20, fontWeight: 800, cursor: gridIdx === arrangeItems.length - 1 ? 'default' : 'pointer', opacity: gridIdx === arrangeItems.length - 1 ? 0.35 : 1, touchAction: 'manipulation' }}
+                              >▶</button>
+                            </div>
                           ) : totalQty > 0 ? (
                             <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', background: 'var(--brand-primary,#0D1B3E)', color: 'var(--brand-accent,#C9A84C)', borderRadius: 10, height: 32 }}>
                               <button onClick={e => { e.stopPropagation(); decrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: 'var(--brand-accent,#C9A84C)', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>−</button>
@@ -1307,7 +1518,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
           borderTop: isMobile ? '1px solid #eee' : 'none',
           display: isMobile && mobileTab !== 'order' ? 'none' : 'flex',
           flexDirection: 'column',
-          flexShrink: isMobile ? undefined : 0
+          flexShrink: isMobile ? undefined : 0,
+          // SEPOS-ANDROID-ORDER-MOBILE-001 (Korakot, 10 Sep) — on a phone the bottom
+          // section (discount/deposit/subtotal/total/send/PAY) is too tall to pin, so
+          // the "View bill & pay" button fell off behind the tab bar. On mobile the
+          // whole panel scrolls as one unit instead (items area natural height below),
+          // so pay is always reachable. Tablet/desktop layout is untouched.
+          ...(isMobile ? { minHeight: 0, overflowY: 'auto' } : {})
         }}>
 
           {/* Order Summary Header
@@ -1317,9 +1534,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             padding: '14px 20px', borderBottom: '1px solid #eee', flexShrink: 0
           }}>
             {isMobile ? (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* SEPOS-BACK-EVERYWHERE-001 — sending auto-switches to this tab;
+                    without its own Back, staff were stranded here after every send. */}
+                <button onClick={backToFloor} style={{
+                  background: '#f0f0f0', border: 'none', borderRadius: 10,
+                  padding: '9px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14, flexShrink: 0
+                }}>
+                  ← Back
+                </button>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {dineTableLabel(order)}
                   </div>
                   <div style={{ fontSize: 12, color: '#888', marginTop: 1 }}>
@@ -1356,12 +1581,27 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
 
           {/* Scrollable order items */}
           <div style={{
-            flex: 1,
-            overflowY: 'auto',
+            // SEPOS-ANDROID-ORDER-MOBILE-001 — on mobile the PANEL scrolls (above), so
+            // the items area is natural height and doesn't scroll on its own; on
+            // tablet/desktop it stays the flex:1 scroll region as before.
+            flex: isMobile ? 'none' : 1,
+            overflowY: isMobile ? 'visible' : 'auto',
             padding: '12px 16px',
-            // Same fixed-tab-bar offset as the menu side on mobile.
-            paddingBottom: isMobile ? 'calc(58px + env(safe-area-inset-bottom, 0px) + 12px)' : '12px'
+            paddingBottom: '12px'
           }}>
+
+            {/* SEPOS-RESEND-002/003 — whole-order / tick-to-choose resend. Shows
+                as soon as ANYTHING has been sent (fired or not) — venues that
+                don't use course calls still need reprints. */}
+            {existingItems.some(i => !i.voided && i.id > 0) && (
+              <button onClick={openResendAll} style={{
+                width: '100%', marginBottom: 10, padding: '9px 12px', borderRadius: 10,
+                border: '1.5px dashed #93c5fd', background: '#eff6ff', color: '#1e40af',
+                cursor: 'pointer', fontWeight: 700, fontSize: 13
+              }}>
+                ↻ Resend order to kitchen…
+              </button>
+            )}
 
             {/* Bar items in cart */}
             {cartBar.length > 0 && (
@@ -1379,8 +1619,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       display: 'flex', justifyContent: 'space-between',
                       alignItems: 'center', fontSize: 13
                     }}>
-                      <span style={{ flex: 1, color: 'var(--brand-primary, #1a1a2e)', fontWeight: 600 }}>
-                        {item.quantity}× {item.name}
+                      {/* SEPOS-ITEM-NOTE-TAP-001 — tap the line to add/edit a note */}
+                      <span onClick={() => setNoteModal({ line: item, text: item.item_note || '' })}
+                        style={{ flex: 1, color: 'var(--brand-primary, #1a1a2e)', fontWeight: 600, cursor: 'pointer' }}>
+                        {item.quantity}× {item.name} <span style={{ fontSize: 11, color: '#c9c3b4' }}>📝</span>
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
@@ -1395,7 +1637,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>
                     )}
                     {item.item_note && (
-                      <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16 }}>📝 {item.item_note}</div>
+                      <div onClick={() => setNoteModal({ line: item, text: item.item_note || '' })} style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16, cursor: 'pointer' }}>📝 {item.item_note}</div>
                     )}
                   </div>
                 ))}
@@ -1420,7 +1662,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
-                        <DiscButton item={item} />
+                        <DiscButton item={item} /><MoveButton item={item} />
                         <button onClick={() => handleVoidItem(item)} style={{
                           background: '#fee2e2', border: 'none', borderRadius: 4,
                           padding: '2px 6px', cursor: 'pointer', color: '#ef4444',
@@ -1466,8 +1708,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       display: 'flex', justifyContent: 'space-between',
                       alignItems: 'center', fontSize: 13
                     }}>
-                      <span style={{ flex: 1, color: 'var(--brand-primary, #1a1a2e)', fontWeight: 600 }}>
-                        {item.quantity}× {item.name}
+                      {/* SEPOS-ITEM-NOTE-TAP-001 — tap the line to add/edit a kitchen note */}
+                      <span onClick={() => setNoteModal({ line: item, text: item.item_note || '' })}
+                        style={{ flex: 1, color: 'var(--brand-primary, #1a1a2e)', fontWeight: 600, cursor: 'pointer' }}>
+                        {item.quantity}× {item.name} <span style={{ fontSize: 11, color: '#c9c3b4' }}>📝</span>
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
@@ -1482,7 +1726,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>
                     )}
                     {item.item_note && (
-                      <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16 }}>📝 {item.item_note}</div>
+                      <div onClick={() => setNoteModal({ line: item, text: item.item_note || '' })} style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16, cursor: 'pointer' }}>📝 {item.item_note}</div>
                     )}
                   </div>
                 ))}
@@ -1520,7 +1764,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                           border: 'none', borderRadius: 8, padding: '6px 14px',
                           cursor: 'pointer', fontWeight: 700, fontSize: 12
                         }}>
-                        {firingCourse === Number(course) ? '...' : `🔥 Fire ${COURSE_LABELS[course]}`}
+                        {firingCourse === Number(course) ? '...' : `🔥 Call ${COURSE_LABELS[course]}`}
                       </button>
                     )}
                   </div>
@@ -1551,7 +1795,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                           <span style={{ color: '#92400e', fontWeight: 600 }}>
                             £{(item.unit_price * item.quantity).toFixed(2)}
                           </span>
-                          <DiscButton item={item} />
+                          <DiscButton item={item} /><MoveButton item={item} />
                           <button onClick={() => handleVoidItem(item)} style={{
                             background: '#fee2e2', border: 'none', borderRadius: 4,
                             padding: '2px 6px', cursor: 'pointer', color: '#ef4444',
@@ -1589,7 +1833,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                         </span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
-                          <DiscButton item={item} />
+                          <DiscButton item={item} /><MoveButton item={item} />
                           <button onClick={() => handleVoidItem(item)} style={{
                             background: '#fee2e2', border: 'none', borderRadius: 4,
                             padding: '2px 6px', cursor: 'pointer', color: '#ef4444',
@@ -1643,7 +1887,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
           <div style={{
             padding: '14px 16px',
             paddingBottom: isMobile ? 'calc(58px + env(safe-area-inset-bottom, 0px) + 14px)' : '14px',
-            borderTop: '1px solid #eee', flexShrink: 0
+            borderTop: '1px solid #eee',
+            // SEPOS-ANDROID-ORDER-MOBILE-001 — natural height so it flows inside the
+            // scrolling panel on mobile (was flexShrink:0 pinned, which clipped pay).
+            flexShrink: isMobile ? undefined : 0
           }}>
             {/* SEPOS-QR-ORDER-001 — customer PAID at order time; staff must not
                 charge again. The bill closes itself when everything is served. */}
@@ -2015,7 +2262,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Price</label>
                   <div style={{ position: 'relative' }}>
                     <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
-                    <input type="number" step="0.01" min="0" value={miscPopup.price} onChange={e => setMiscPopup(p => ({ ...p, price: e.target.value }))}
+                    <input type="text" inputMode="decimal" step="0.01" min="0" value={miscPopup.price} onChange={e => setMiscPopup(p => ({ ...p, price: e.target.value }))}
                       placeholder="0.00" style={{ width: '100%', height: 48, padding: '0 12px 0 24px', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
                   </div>
                 </div>
@@ -2023,7 +2270,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Qty</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <button onClick={() => setMiscPopup(p => ({ ...p, quantity: Math.max(1, (Number(p.quantity) || 1) - 1) }))} style={{ width: 40, height: 48, borderRadius: 10, border: '1.5px solid #ddd', background: '#f7f7f7', cursor: 'pointer', fontSize: 20, fontWeight: 700 }}>−</button>
-                    <input type="number" min="1" value={miscPopup.quantity} onChange={e => setMiscPopup(p => ({ ...p, quantity: e.target.value }))}
+                    <input type="text" inputMode="decimal" min="1" value={miscPopup.quantity} onChange={e => setMiscPopup(p => ({ ...p, quantity: e.target.value }))}
                       style={{ width: 44, height: 48, textAlign: 'center', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
                     <button onClick={() => setMiscPopup(p => ({ ...p, quantity: (Number(p.quantity) || 1) + 1 }))} style={{ width: 40, height: 48, borderRadius: 10, border: '1.5px solid #ddd', background: '#f7f7f7', cursor: 'pointer', fontSize: 20, fontWeight: 700 }}>+</button>
                   </div>
@@ -2247,6 +2494,74 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
         )}
 
         {/* RESEND POPUP (SEPOS-024) */}
+        {/* SEPOS-ITEM-NOTE-TAP-001 — note modal for a tapped basket line */}
+        {noteModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: 20 }}>
+            <div style={{ background: 'white', borderRadius: 14, padding: 22, width: 'min(420px, 100%)' }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--brand-primary,#0D1B3E)', marginBottom: 4 }}>
+                📝 Note for the kitchen
+              </div>
+              <div style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>
+                {noteModal.line.quantity}× {noteModal.line.name} — prints bold on the ticket, never on the customer bill.
+              </div>
+              <textarea autoFocus value={noteModal.text}
+                onChange={e => setNoteModal(m => ({ ...m, text: e.target.value }))}
+                placeholder="e.g. no peanuts · extra spicy · sauce on the side"
+                style={{ width: '100%', minHeight: 84, padding: 10, borderRadius: 10, border: '1.5px solid #ddd', fontSize: 15, boxSizing: 'border-box', resize: 'vertical' }} />
+              <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                <button onClick={() => setNoteModal(null)} style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700 }}>Cancel</button>
+                {noteModal.line.item_note && (
+                  <button onClick={() => { setNoteModal(m => ({ ...m, text: '' })); setCart(prev => prev.map(l => (l === noteModal.line ? { ...l, item_note: undefined } : l))); setNoteModal(null); }}
+                    style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: '#fee2e2', color: '#ef4444', cursor: 'pointer', fontWeight: 700 }}>Remove note</button>
+                )}
+                <button onClick={saveLineNote} style={{ flex: 2, padding: '11px', borderRadius: 10, border: 'none', background: 'var(--brand-primary,#0D1B3E)', color: 'white', cursor: 'pointer', fontWeight: 700 }}>Save note</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SEPOS-RESEND-002 — whole-order resend with tick-to-choose */}
+        {resendAllModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: 20 }}>
+            <div style={{ background: 'white', borderRadius: 14, padding: 22, width: 'min(460px, 100%)', maxHeight: '86vh', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--brand-primary,#0D1B3E)', marginBottom: 4 }}>↻ Resend to kitchen</div>
+              <div style={{ fontSize: 13, color: '#888', marginBottom: 10 }}>Everything is ticked — untick what the kitchen doesn't need again.</div>
+              <div style={{ overflowY: 'auto', flex: 1, border: '1px solid #f0f0f0', borderRadius: 10, padding: '6px 10px', marginBottom: 12 }}>
+                {resendAllModal.items.map(item => {
+                  const on = resendAllModal.ticked.has(item.id);
+                  return (
+                    <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid #f7f7f7', cursor: 'pointer', fontSize: 14 }}>
+                      <input type="checkbox" checked={on} onChange={() => setResendAllModal(m => {
+                        const t = new Set(m.ticked); on ? t.delete(item.id) : t.add(item.id); return { ...m, ticked: t };
+                      })} style={{ width: 18, height: 18, flexShrink: 0 }} />
+                      <span style={{ flex: 1 }}>{item.quantity}× {item.name}{item.is_bar ? ' 🍹' : ''}{item.notes ? <span style={{ color: '#999', fontSize: 12 }}> — {item.notes}</span> : null}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#888', marginBottom: 6 }}>Reason</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+                {['Reprint', ...RESEND_REASONS].map(r => (
+                  <button key={r} onClick={() => setResendAllModal(m => ({ ...m, reason: r }))} style={{
+                    padding: '8px 14px', borderRadius: 18, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                    background: resendAllModal.reason === r ? 'var(--brand-primary,#0D1B3E)' : '#ECE7DA',
+                    color: resendAllModal.reason === r ? 'white' : '#7C766A'
+                  }}>{r === 'Reprint' ? '🖨 Reprint' : r}</button>
+                ))}
+              </div>
+              {resendAllModal.reason === 'Reprint'
+                ? <div style={{ fontSize: 11.5, color: '#999', marginBottom: 12 }}>Reprint = paper only. Nothing is recorded and stock is untouched — for a lost or unreadable ticket.</div>
+                : <div style={{ fontSize: 11.5, color: '#92400e', marginBottom: 12 }}>“{resendAllModal.reason}” is recorded on each item{resendAllModal.reason === 'Remake' ? ' and the kitchen’s stock is depleted again' : ''}.</div>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setResendAllModal(null)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700 }}>Cancel</button>
+                <button onClick={confirmResendAll} disabled={resendAllModal.ticked.size === 0} style={{ flex: 2, padding: '12px', borderRadius: 10, border: 'none', background: resendAllModal.ticked.size ? '#1e40af' : '#cbd5e1', color: 'white', cursor: resendAllModal.ticked.size ? 'pointer' : 'default', fontWeight: 700 }}>
+                  ↻ Resend {resendAllModal.ticked.size} item{resendAllModal.ticked.size === 1 ? '' : 's'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {resendPopup && (
           <div style={{
             position:'fixed', top:0, left:0, right:0, bottom:0,
@@ -2273,6 +2588,44 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                 ))}
               </div>
               <button onClick={() => setResendPopup(null)} style={{
+                width:'100%', marginTop:14, padding:'12px', borderRadius:10, border:'none',
+                background:'#f0f0f0', cursor:'pointer', fontWeight:700, fontSize:14
+              }}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* SEPOS-ITEM-MOVE-001 — MOVE-TO-TABLE POPUP */}
+        {movePopup && (
+          <div style={{
+            position:'fixed', top:0, right:0, bottom:0, left:0, zIndex:100002,
+            background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center',
+          }}>
+            <div style={{ background:'white', borderRadius:16, padding:24, width:440, maxWidth:'92vw', maxHeight:'85vh', overflowY:'auto' }}>
+              <h2 style={{ fontSize:18, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>
+                ⇄ Move to table
+              </h2>
+              <div style={{ fontSize:14, color:'#555', marginBottom:18 }}>
+                {movePopup.item.quantity}× {movePopup.item.name} — which table is it going to?
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(96px, 1fr))', gap:8 }}>
+                {movePopup.tables.map(t => {
+                  const label = (t.name && String(t.name).trim()) || `Table ${t.table_number}`;
+                  const occupied = t.status === 'occupied';
+                  return (
+                    <button key={t.id} onClick={() => confirmMoveItem(t)} style={{
+                      padding:'14px 6px', borderRadius:10,
+                      border:'2px solid ' + (occupied ? '#fecaca' : '#bbf7d0'),
+                      background:'white', color: occupied ? '#b91c1c' : '#15803d',
+                      cursor:'pointer', fontWeight:700, fontSize:14,
+                    }}>
+                      {label}
+                      <div style={{ fontSize:10, fontWeight:600, opacity:0.75 }}>{occupied ? 'joins their bill' : 'opens new bill'}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={() => setMovePopup(null)} style={{
                 width:'100%', marginTop:14, padding:'12px', borderRadius:10, border:'none',
                 background:'#f0f0f0', cursor:'pointer', fontWeight:700, fontSize:14
               }}>Cancel</button>
@@ -2344,7 +2697,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   {discountPopup.type === 'percent' ? 'Discount %' : 'Discount £'}
                 </label>
                 <input
-                  type="number" min="0" step={discountPopup.type === 'percent' ? '1' : '0.01'}
+                  type="text" inputMode="decimal" min="0" step={discountPopup.type === 'percent' ? '1' : '0.01'}
                   autoFocus
                   value={discountPopup.value}
                   onChange={(e) => setDiscountPopup({ ...discountPopup, value: e.target.value })}
@@ -2514,7 +2867,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                         background: '#f0f0f0', cursor: 'pointer', fontWeight: 800, fontSize: 18
                       }}>−</button>
                     <input
-                      type="number"
+                      type="text" inputMode="decimal"
                       min="1"
                       max={voidPopup.item.quantity}
                       value={voidPopup.qty}
@@ -2607,7 +2960,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                 alert('⚠️ Payment NOT taken — items in the cart were never sent to the kitchen.\n\nClose the bill, tap "Send to kitchen", then pay.');
                 return false;
               }
-              const payRes = await payOrder(orderId, total, method, tenders);
+              const payRes = await payOrder(orderId, total, method, tenders, tip);
               // SEPOS-DBLPAY-001 — the server rejects a second payment on an
               // already-closed bill (409 alreadyPaid). That means the payment
               // is ALREADY recorded (a double-tap or another device beat us),

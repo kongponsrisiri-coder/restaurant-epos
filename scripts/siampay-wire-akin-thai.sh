@@ -28,40 +28,24 @@ case "$PLATFORM_STRIPE_SECRET_KEY" in
   *) echo "✗ platform secret is NOT a live key — aborting"; exit 1;;
 esac
 
-echo "→ searching the SiamPay platform for Akin Thai's connected account…"
-ACCOUNTS_JSON=$(curl -s -m 20 "https://api.stripe.com/v1/accounts?limit=100" \
-  -u "${PLATFORM_STRIPE_SECRET_KEY}:")
-
-ACCT_INFO=$(STRIPE_JSON="$ACCOUNTS_JSON" python3 - << 'PY'
-import json, os, sys
-data = json.loads(os.environ["STRIPE_JSON"])
-hits = []
-for a in data.get("data", []):
-    hay = " ".join(filter(None, [
-        a.get("email") or "",
-        (a.get("business_profile") or {}).get("name") or "",
-        ((a.get("settings") or {}).get("dashboard") or {}).get("display_name") or "",
-    ])).lower()
-    if "akin" in hay:
-        hits.append(a)
-if not hits:
-    print("NONE")
-    sys.exit(0)
-if len(hits) > 1:
-    print("MULTI " + " ".join(h["id"] for h in hits))
-    sys.exit(0)
-a = hits[0]
-print(f"{a['id']} details={a.get('details_submitted')} charges={a.get('charges_enabled')} payouts={a.get('payouts_enabled')}")
-PY
-)
+# Known account — created by siampay-akin-thai-onboarding-link.sh and completed
+# by Jaranthon 10 Aug 2026 (shows Enabled in the platform dashboard). Direct
+# retrieve beats name-matching: the dashboard lists it under the OWNER'S name,
+# not "Akin", so the old search could miss it.
+ACCT_ID="acct_1U2wLtHd6lHQpKgM"
+echo "→ checking capabilities on ${ACCT_ID}…"
+ACCT_INFO=$(curl -s -m 20 "https://api.stripe.com/v1/accounts/${ACCT_ID}" \
+  -u "${PLATFORM_STRIPE_SECRET_KEY}:" | python3 -c '
+import json, sys
+a = json.load(sys.stdin)
+if a.get("error"):
+    print("ERROR " + a["error"].get("message", "")[:80]); sys.exit(0)
+print(f"{a[\"id\"]} details={a.get(\"details_submitted\")} charges={a.get(\"charges_enabled\")} payouts={a.get(\"payouts_enabled\")}")')
 
 echo "  $ACCT_INFO"
 case "$ACCT_INFO" in
-  NONE)  echo "✗ no connected account matching 'akin' — check the ops SiamPay card for the id"; exit 1;;
-  MULTI*) echo "✗ more than one match — tell Krit which acct id is right"; exit 1;;
+  ERROR*) echo "✗ Stripe rejected the account lookup — tell Krit"; exit 1;;
 esac
-
-ACCT_ID=$(echo "$ACCT_INFO" | awk '{print $1}')
 echo "$ACCT_INFO" | grep -q "charges=True" || {
   echo "✗ charges NOT enabled yet — onboarding incomplete on Stripe's side; not wiring."; exit 1; }
 

@@ -99,15 +99,17 @@ SiamEPOS costs £89/month and sets up in an afternoon.
 | Company | SiamEPOS Ltd |
 | Registered in | England & Wales |
 | SIC code | 62012 — Business and domestic software development |
-| Trademark | UK00004385501 — Filed 11/05/2026 |
+| Trademark | UK00004385501 — **REGISTERED 14/08/2026** (filed 11/05/2026, renewal 11/05/2036) |
 | Trademark type | Figurative mark (lotus badge + SiamEPOS text) |
 | Classes | Class 9 (downloadable software) + Class 42 (SaaS) |
 | Company No. (CRN) | 17215576 — incorporated 12 May 2026 |
-| Owner | Korakot Kongponsrisiri (transfer to SiamEPOS Ltd pending) |
+| Owner | Korakot Kongponsrisiri (personal) — ⚠️ **transfer to SiamEPOS Ltd STILL PENDING: file form TM16, £60.** Register also still shows the OLD W14 9EX address; the TM16 fixes both at once, so do NOT file a separate TM21A. Deed + filing pack: `~/Documents/Claude/Projects/SiamEpos/SiamEPOS-Trademark-Assignment-2026-08.md` (+ .pdf) |
 | Bank | Starling Business Account |
 | ICO Registration | ✅ DONE 2026-06-05 — Tier 1, app no. C1951827, £52/yr (£47 by DD). Awaiting ZB/Z ref. |
 | Corporation Tax | ✅ DONE — registered with HMRC |
 | Accountant | NOT YET — find one familiar with tech startups |
+| **Start Up Loan (British Business Bank)** | ✅ **£15,000 approved in TWO TRANCHES @ 7.5% / 60 months** — arranged via **BizBritain (Karl)**, funded by **GC Business Finance** (FCA regulated · 0161 245 4977 · bfsul@growthco.uk). **Tranche A = £10,000 (DRAWN) → repayment ≈ £200/month.** **Tranche B = £5,000, NOT yet drawn** — available on application after 3 full on-time Tranche-A repayments + financial declaration + possible 3 months personal bank statements + credit check; **not guaranteed, provider's sole discretion.** ⚠️ **PERSONAL liability of the director, not the company's.** Do not recommend applying for a new Start Up Loan — this facility already exists. |
+| ⚠️ **Cash reality (25 Aug 2026)** | MRR **£260** vs loan repayment **~£200/mo** (Tranche A only — earlier £300 figure was WRONG, it assumed all £15k drawn). Revenue **does** now cover debt service. Bank £843.02; Korakot has been topping the company up personally. Baan Rao + Yum Yum Thai signing adds ~£118/mo. Every spending recommendation still starts here. |
 
 **Document footer (use everywhere):**
 ```
@@ -254,7 +256,7 @@ SiamEPOS™ UK00004385501
 |--------|------|---------|
 | SEPOS-043 | Role-based access hierarchy (waiter/supervisor/manager) | 🟡 MEDIUM |
 | Mac reservations push to cloud | Currently pull-only | 🟡 MEDIUM |
-| Trademark transfer to SiamEPOS Ltd | Email information@ipo.gov.uk | 🟡 THIS MONTH |
+| Trademark transfer to SiamEPOS Ltd | **Sign the deed + file TM16 (£60)** — mark is now REGISTERED, so do it promptly (six-month recordal rule affects cost recovery in infringement claims) | 🔴 NOW |
 | Find accountant | R&D Tax Credits — could mean thousands back | 🟡 THIS MONTH |
 | Orders ↔ reservations linkage | orders.reservation_id for accurate revenue | 🟢 LOW |
 
@@ -270,7 +272,16 @@ SiamEPOS™ UK00004385501
 | Counter (proposed) | £29/month | Simple till for grab-and-go, no floor plan/reservations |
 
 ### Additional Revenue
-- Setup fee: £149–299 one-off per new client
+- **Setup / installation fee: £0 — NONE. Deliberate policy (Korakot, 19 Aug 2026).**
+  *Why:* this is a long-run relationship business. A £149–299 barrier costs more in
+  lost signings and goodwill than it earns, and "no setup fee" is already our public
+  position on the bring-your-own-hardware card. Install cost is treated as an
+  **investment in trust**, recovered through retention, referrals and the fact that
+  once trust is established **installs go REMOTE** — Krit's provisioning flow makes
+  that very doable. ⚠️ **The economics depend on that shift actually happening:**
+  free install + near-daily site visits is the single largest cost in the business
+  today. See Forecast v5 §"Remote install is now a commercial milestone".
+  *(Supersedes the old £149–299 setup fee — do NOT quote it.)*
 - **Website Service: £5/month** — website + hosting + the client's own
   domain (registered in THEIR name) + updates. The one-off build is
   **quoted case by case** — never quote a public build price.
@@ -287,7 +298,20 @@ SiamEPOS™ UK00004385501
 
 ---
 
-## FINANCIAL PROJECTIONS (Business Plan v4)
+## FINANCIAL PROJECTIONS — ⚠️ v4 SUPERSEDED (see Forecast v5, 19 Aug 2026)
+
+> **The v4 numbers below are NO LONGER the plan.** v4 forecast 24 clients by Month 3; actual at Month 3 = **6**. Rebuilt honestly in
+> `~/Documents/Claude/Projects/SiamEpos/SiamEPOS-Client-Forecast-v5-2026-08.md` (+ .pdf).
+> **Key reframe (Korakot, 19 Aug 2026): May–July 2026 was the PROTOTYPE phase; the system came off prototype when FERN signed up.**
+> The commercial clock therefore starts **August 2026**.
+>
+> **Forecast v5, Aug 2026 → Aug 2027:** conservative 22 clients / £1,540 MRR · **realistic 33 clients / £2,475 MRR (~£29,700 ARR)** · good year 50 clients / £4,000 MRR.
+> **12-month turnover: ~£18.5k conservative · ~£30.4k realistic · ~£49.8k good year.**
+> ⚠️ **The "£50,000 Year 1 turnover for bank" figure below is the GOOD-YEAR case, not the expected one — the honest expected figure is ~£30,000. Revise it anywhere it has been stated.**
+> **Raise framing:** £300k post-money vs ~£30k forward ARR ≈ **10× forward ARR** — defensible; do NOT quote a multiple of today's MRR.
+> **Bottleneck is founder time, not demand.** Support hire triggers at 12–15 clients.
+
+### (historic) Business Plan v4 projections
 
 | Period | Active Clients | MRR | Net Profit |
 |--------|--------------|-----|-----------|

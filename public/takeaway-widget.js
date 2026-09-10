@@ -395,11 +395,16 @@
   function cartSubtotal() {
     return state.cart.reduce((s, i) => s + Number(i.unit_price) * Number(i.quantity), 0);
   }
+  // SEPOS-TA-PROMO-001 — optional spend threshold (0/unset = unconditional,
+  // Chart Thai's existing behaviour). Server re-applies identically.
+  function discountMin() { return Math.max(0, Number(state.settings?.discount_min_total) || 0); }
   function cartTotal() { // order total after discount (before any handling fee)
     const gross = cartSubtotal();
     const pct = discountPct();
-    return pct > 0 ? Math.round(gross * (1 - pct / 100) * 100) / 100 : gross;
+    return (pct > 0 && gross >= discountMin()) ? Math.round(gross * (1 - pct / 100) * 100) / 100 : gross;
   }
+  // SEPOS-TA-CHOICE-001 — is THIS order being paid online right now?
+  function payingOnline() { return state.stripeConfigured && !(state.payChoice && state.payAtRestaurant); }
   // SIAMPAY-002 — flat customer-facing handling fee (SiamPay tenants only).
   // SIAMPAY-002 (Korakot 21 Jul): the customer pays the menu price only —
   // the SiamPay fee is deducted from the restaurant's settlement server-side.
@@ -457,7 +462,12 @@
     return out;
   }
   function changeQty(key, delta) {
-    const it = state.cart.find(c => c.key === key);
+    // SEPOS-TA-CART-001 (Yum Yum live, 25 Aug) — cart keys are STRINGS
+    // ("431|12" = item|modifiers). One binding site Number()-coerced them to
+    // NaN, which killed +/− on the desktop cart panel for every line.
+    // Normalise here so no call site can break the lookup again.
+    const k = String(key);
+    const it = state.cart.find(c => String(c.key) === k);
     if (!it) return;
     it.quantity += delta;
     if (it.quantity <= 0) state.cart = state.cart.filter(c => c.key !== key);
@@ -481,8 +491,8 @@
     const side = document.querySelector('.tw-cart-sidebar');
     if (side) {
       side.innerHTML = '<div class="tw-cart-title">🛒 Your order</div>' + renderCartRows();
-      side.querySelectorAll('[data-inc]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(Number(b.dataset.inc), 1); }));
-      side.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(Number(b.dataset.dec), -1); }));
+      side.querySelectorAll('[data-inc]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(b.dataset.inc, 1); }));
+      side.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(b.dataset.dec, -1); }));
     }
     // Keep the desktop footer Checkout button's TOTAL in sync. updateCartUI is a
     // PARTIAL re-render (used so adding a dish doesn't scroll the menu back to the
@@ -695,7 +705,7 @@
     const count = cartCount();
     return `
       ${renderBusyChip()}
-      ${discountPct() > 0 ? `<div class="tw-discount-chip">🎉 ${discountPct()}% off — online order discount, applied at checkout</div>` : ''}
+      ${discountPct() > 0 ? `<div class="tw-discount-chip">🎉 ${discountPct()}% off${discountMin() > 0 ? ` when you order over ${fmt(discountMin())}` : ' — online order discount'}, applied at checkout</div>` : ''}
       <div class="tw-split">
         <div class="tw-menu-col">
           <div class="tw-cats">
@@ -837,17 +847,25 @@
     // so the customer reads it as a promise rather than a slot they picked.
     const mins = state.availability?.wait_minutes ?? 20;
     const pTime = new Date(computePickupISO()).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
-    const payBlock = state.stripeConfigured
+    // SEPOS-TA-CHOICE-001 — venue policy 'choice': the customer picks how to
+    // pay. Card element only mounts when paying online.
+    const choiceRow = (state.stripeConfigured && state.payChoice)
+      ? `<div style="display:flex;gap:8px;margin:4px 0 10px;">
+           <button type="button" id="tw-paych-online" style="flex:1;border:2px solid ${payingOnline() ? '#1E4038' : '#d8d4ca'};background:${payingOnline() ? '#eef5ef' : '#fff'};border-radius:12px;padding:10px 6px;font-weight:800;font-size:13px;color:${payingOnline() ? '#1E4038' : '#555'};cursor:pointer;">💳 Pay now online</button>
+           <button type="button" id="tw-paych-collect" style="flex:1;border:2px solid ${!payingOnline() ? '#1E4038' : '#d8d4ca'};background:${!payingOnline() ? '#eef5ef' : '#fff'};border-radius:12px;padding:10px 6px;font-weight:800;font-size:13px;color:${!payingOnline() ? '#1E4038' : '#555'};cursor:pointer;">🏪 Pay at the restaurant</button>
+         </div>`
+      : '';
+    const payBlock = choiceRow + (payingOnline()
       ? `<div style="margin-top:4px;">
            <label class="tw-label" style="margin-top:0;">Card details</label>
            <div id="tw-card-element"></div>
            <div class="tw-stripe-badge">Secured by Stripe</div>
          </div>`
-      : `<div style="background:#fef9eb;border:1.5px solid #f0d070;border-radius:12px;padding:14px 16px;font-size:13px;color:#92400e;line-height:1.5;">
-           🧪 <strong>Demo mode</strong> — No card details collected. Clicking Pay sends the order straight to the kitchen.
-         </div>`;
+      : `<div style="background:#f0f7ee;border:1.5px solid #86efac;border-radius:12px;padding:14px 16px;font-size:13px;color:#166534;line-height:1.5;">
+           💷 <strong>Pay on collection</strong> — nothing to pay online now. Pay by cash or card when you collect your order.
+         </div>`);
     return `
-      <h2 class="tw-h2">Review &amp; pay</h2>
+      <h2 class="tw-h2">${payingOnline() ? 'Review &amp; pay' : 'Review your order'}</h2>
       <div style="background:#f8f8f8;border-radius:14px;padding:16px;margin-bottom:16px;">
         ${state.cart.map(c => `
           <div class="tw-review-row">
@@ -856,9 +874,9 @@
             <span style="font-weight:700;">${fmt(c.unit_price * c.quantity)}</span>
           </div>
         `).join('')}
-        ${discountPct() > 0 ? `
+        ${(cartSubtotal() - cartTotal()) > 0 ? `
           <div class="tw-review-row"><span>Subtotal</span><span>${fmt(cartSubtotal())}</span></div>
-          <div class="tw-review-row" style="color:#166534;font-weight:700;"><span>🎉 Online discount (${discountPct()}%)</span><span>−${fmt(cartSubtotal() - cartTotal())}</span></div>` : ''}
+          <div class="tw-review-row" style="color:#166534;font-weight:700;"><span>🎉 Online discount (${discountPct()}%${discountMin() > 0 ? `, orders over ${fmt(discountMin())}` : ''})</span><span>−${fmt(cartSubtotal() - cartTotal())}</span></div>` : ''}
         <div class="tw-review-total">
           <span>Total</span>
           <span style="color:#C9A84C;">${fmt(payTotal())}</span>
@@ -892,6 +910,7 @@
         <div class="tw-success-num">${esc(r.order_number || '—')}</div>
         <p style="color:#555;font-size:14px;line-height:1.6;max-width:300px;margin:0 auto 20px;">
           Please show this number when you collect.
+          ${payingOnline() ? '' : '<br><strong>Pay when you collect</strong> — cash or card.'}
           ${state.customer.email ? '<br>A confirmation email is on its way.' : ''}
         </p>
         <p style="color:#aaa;font-size:12px;">
@@ -922,7 +941,7 @@
     } else if (state.step === 3) {
       nextLabel = 'Review order →';
     } else if (state.step === 4) {
-      nextLabel = state.stripeConfigured
+      nextLabel = payingOnline()
         ? `Pay ${fmt(payTotal())}`
         : `✓ Place order · ${fmt(cartTotal())}`;
     }
@@ -991,8 +1010,15 @@
     bindHandlers();
 
     // SEPOS-040 — mount Stripe card element after step-4 DOM is ready.
-    if (state.step === 4 && state.stripeConfigured) {
+    if (state.step === 4 && payingOnline()) {
       mountStripeCard();
+    }
+    // SEPOS-TA-CHOICE-001 — payment-method toggle on step 4.
+    if (state.step === 4 && state.stripeConfigured && state.payChoice) {
+      const on = document.getElementById('tw-paych-online');
+      const co = document.getElementById('tw-paych-collect');
+      if (on) on.addEventListener('click', () => { state.payAtRestaurant = false; render(); });
+      if (co) co.addEventListener('click', () => { state.payAtRestaurant = true; render(); });
     }
   }
 
@@ -1254,6 +1280,7 @@
       if (r.ok) {
         const data = await r.json();
         state.stripeConfigured    = !!data.configured;
+        state.payChoice           = !!data.pay_choice;   // SEPOS-TA-CHOICE-001 — customer picks online vs at-restaurant
         state.stripePublishableKey = data.publishable_key || null;
         // SIAMPAY-002 — SiamPay tenants: confirm on the connected account +
         // show the flat customer-facing handling fee.
@@ -1294,13 +1321,13 @@
 
   async function submitOrder() {
     const btn = $('tw-next');
-    if (btn) { btn.disabled = true; btn.textContent = state.stripeConfigured ? 'Processing payment…' : 'Placing order…'; }
+    if (btn) { btn.disabled = true; btn.textContent = payingOnline() ? 'Processing payment…' : 'Placing order…'; }
     state.error = '';
 
     // SEPOS-040 — Stripe payment flow (PaymentElement → Apple Pay /
     // Google Pay / card depending on device).
     let paymentIntentId = null;
-    if (state.stripeConfigured) {
+    if (payingOnline()) {   // SEPOS-TA-CHOICE-001 — pay-at-restaurant orders skip the card entirely
       if (!_stripe || !_elements || !_paymentElement) {
         state.error = 'Payment not ready — please wait a moment and try again.';
         render(); return;
@@ -1472,6 +1499,9 @@
     }
     // SEPOS-040 — pre-fetch Stripe config so step 4 renders correctly on first open.
     loadStripeConfig();
+    // SEPOS-ORDER-UNIFY-001 — the hosted /order page opens the flow instantly
+    // (no button hunt); site embeds are unaffected.
+    if (SELF_SCRIPT && SELF_SCRIPT.getAttribute('data-auto-open') === '1') openWidget();
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

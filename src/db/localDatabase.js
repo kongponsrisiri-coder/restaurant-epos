@@ -212,6 +212,7 @@ function initSchema() {
       order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
       amount REAL,
       method TEXT,
+      tip REAL DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -311,6 +312,36 @@ function initSchema() {
       float_amount REAL DEFAULT 0,
       z_report_id INTEGER,
       cloud_id INTEGER,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- SEPOS-OFFICE-001 — one-time Back Office sign-in links (see database.js).
+    -- Exists locally only so the shared server code never hits a missing
+    -- table; owners use the CLOUD address, not the till on the LAN.
+    CREATE TABLE IF NOT EXISTS login_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT UNIQUE NOT NULL,
+      staff_id INTEGER NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      used_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS device_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT UNIQUE NOT NULL,
+      email TEXT NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      used_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS trusted_devices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT UNIQUE NOT NULL,
+      email TEXT NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      last_seen TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -420,6 +451,17 @@ function initSchema() {
     CREATE TABLE IF NOT EXISTS customer_profiles (
       contact_key TEXT PRIMARY KEY,
       birthday TEXT,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- SEPOS-ALLERGEN-LOCAL-001 — manual allergen ticks (Allergen Menu sheet).
+    -- Missing on local installs until 18 Aug 2026: every manual tick 500'd
+    -- with "no such table" on desktop/host tills (Tori Nori install night).
+    -- UNIQUE(menu_item_id) is required for the upsert's ON CONFLICT.
+    CREATE TABLE IF NOT EXISTS dish_allergens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      menu_item_id INTEGER UNIQUE,
+      allergens TEXT,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -727,6 +769,10 @@ function runMigrations() {
   // (see database.js for why). Mirrored here so both backends carry them.
   addColumnIfMissing('orders', 'service_charge', 'REAL');
   addColumnIfMissing('order_items', 'voided_at', 'TIMESTAMP');
+  // SEPOS-ITEM-MOVE-001 — audit stamp: which bill a line was moved off.
+  addColumnIfMissing('order_items', 'moved_from_order_id', 'INTEGER');
+  // SEPOS-MENU-CHANNELS-001 — QR-channel availability (NULL = follow is_online).
+  addColumnIfMissing('menu_items', 'is_qr', 'INTEGER');
   // SEPOS-PRO-008: link a bill to its booking for accurate per-customer spend
   addColumnIfMissing('orders', 'reservation_id', 'INTEGER');
   // SEPOS-021: VAT rate per menu item
@@ -743,6 +789,7 @@ function runMigrations() {
   addColumnIfMissing('reservations', 'table_ids', 'TEXT'); // multi-table join
   // SEPOS-050: per-restaurant online-booking party-size cap + contact phone
   addColumnIfMissing('restaurant_settings', 'max_party_size', 'INTEGER DEFAULT 8');
+  addColumnIfMissing('restaurant_settings', 'weekly_hours', 'TEXT');   // SEPOS-HOURS-PERDAY-001
   addColumnIfMissing('restaurant_settings', 'restaurant_phone', 'TEXT');
   addColumnIfMissing('tables', 'is_takeaway', 'INTEGER DEFAULT 0'); // SEPOS-TAKEAWAY-TABLE
   addColumnIfMissing('restaurant_settings', 'timezone',                     "TEXT DEFAULT 'Europe/London'");
@@ -795,6 +842,7 @@ function runMigrations() {
   // SEPOS-ALLERGEN-OPT-001 — global (applies to every item) + allergen (⚠️ + free) modifier groups.
   addColumnIfMissing('modifier_groups', 'is_global', 'INTEGER DEFAULT 0');
   addColumnIfMissing('modifier_groups', 'is_allergen', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('modifier_groups', 'sort_order', 'INTEGER DEFAULT 0');
 
   // SEPOS-STATION-001 — category -> printer routing (NULL = today's is_bar rule).
   addColumnIfMissing('categories', 'printer_id', 'INTEGER');
@@ -815,6 +863,7 @@ function runMigrations() {
   addColumnIfMissing('order_items', 'payment_id', 'INTEGER');
   // SEPOS-SYNC-TENDERS-001 — cloud id of a mirrored tender (see syncService).
   addColumnIfMissing('payments', 'cloud_id', 'INTEGER');
+  addColumnIfMissing('payments', 'tip', 'REAL DEFAULT 0');            // SEPOS-TIPS-001
   addColumnIfMissing('payments', 'payment_intent_id', 'TEXT');   // SEPOS-QR-PAY-REDO
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_cloud_id      ON orders(cloud_id)      WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.cloud_id index:', err.message); }
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_order_items_cloud_id ON order_items(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] order_items.cloud_id index:', err.message); }

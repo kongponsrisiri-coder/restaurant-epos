@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { loginStaff, clockToggle, emailLogin, storePinSession, getStaff, getRestaurant, getSettings, changeStaffPin } from '../api';
+import { loginStaff, clockToggle, emailLogin, requestLoginLink, consumeLoginLink, storePinSession, getStaff, getRestaurant, getSettings, changeStaffPin, pushCfdState, requestDeviceAuth, consumeDeviceAuth } from '../api';
 import { resetDevice, currentTillTarget, canSwitchClient } from '../utils/deviceReset';
 import { NAVY, GOLD, RED, GREEN } from '../theme'; // SEPOS-BRAND-001 — per-client brand colours
 
@@ -63,6 +63,11 @@ const isManagerRole = (role) => role === 'admin' || role === 'manager';
 export default function LoginScreen({ onLogin }) {
   const [pin, setPin]         = useState('');
   const [error, setError]     = useState('');
+  // SEPOS-DEVICE-AUTH-001 — public cloud till gated behind email device auth.
+  const [deviceAuthNeeded, setDeviceAuthNeeded] = useState(false);
+  const [deviceEmail, setDeviceEmail] = useState('');
+  const [deviceMsg, setDeviceMsg] = useState('');
+  const [deviceBusy, setDeviceBusy] = useState(false);
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   // True from mount until the first data-load either succeeds or exhausts its
@@ -70,7 +75,12 @@ export default function LoginScreen({ onLogin }) {
   // alarming "Staff list unavailable / no restaurant" flash. Web resolves on
   // the first try, so this is visible only for the ~1s the local server boots.
   const [booting, setBooting] = useState(true);
-  const [mode, setMode]         = useState('pin');   // 'pin' | 'email'
+  // SEPOS-OFFICE-001 — <till-url>/#office is the owner Back Office front
+  // door: straight to email sign-in (no staff PIN grid), plus a one-tap
+  // emailed sign-in link. Hash-based so it works on every host (Netlify
+  // till sites, custom domains) with zero redirect config.
+  const isOffice = typeof window !== 'undefined' && String(window.location.hash || '').startsWith('#office');
+  const [mode, setMode]         = useState(isOffice ? 'email' : 'pin');   // 'pin' | 'email'
   // SEPOS-CLOCK-002 — "clock mode": tap Clock in/out FIRST, then enter your
   // code. (The old flow — type PIN then tap Clock — was unreachable because a
   // 4-digit PIN auto-logs-in.) In clock mode the same numpad clocks you in or
@@ -155,10 +165,47 @@ export default function LoginScreen({ onLogin }) {
       if (settings && settings.brand_logo) setBrandLogo(settings.brand_logo); // SEPOS-BRAND-001
       if (settings && settings.brand_logo_size) setLogoSize(settings.brand_logo_size); // SEPOS-BRAND-001
       setPinOnly(settings && String(settings.login_pin_only) === '1'); // SEPOS-PINONLY-001
+      // SEPOS-CFD-001 — while the till is at the login/idle screen, show branding
+      // on the customer-facing display. Fire-and-forget.
+      pushCfdState({ mode: 'idle', restaurant_name: name, logo: (settings && (settings.brand_logo || settings.company_logo)) || '' }).catch(() => {});
     };
     load();
     return () => { cancelled = true; };
   }, []);
+
+  // SEPOS-DEVICE-AUTH-001 — arriving from the authorisation email:
+  // /?device_token=… — consume once, store the long-lived device token,
+  // clean the URL, and carry on to the normal sign-in.
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const t = q.get('device_token');
+      if (!t) return;
+      (async () => {
+        const r = await consumeDeviceAuth(t);
+        if (r?.device_token) {
+          try { localStorage.setItem('siamepos_device_token', r.device_token); } catch {}
+          setDeviceAuthNeeded(false);
+          setSuccess('Device authorised — sign in below.');
+        } else {
+          setDeviceAuthNeeded(true);
+          setDeviceMsg(r?.error || 'That link expired — request a new one.');
+        }
+        try { window.history.replaceState(null, '', window.location.pathname + window.location.hash); } catch {}
+      })();
+    } catch {}
+  }, []);
+
+  async function requestDeviceLink() {
+    if (!deviceEmail.includes('@') || deviceBusy) return;
+    setDeviceBusy(true); setDeviceMsg('');
+    try {
+      const r = await requestDeviceAuth(deviceEmail.trim());
+      setDeviceMsg(r?.error || 'Link sent if that email has access — open the email ON THIS DEVICE and tap Authorise.');
+    } catch {
+      setDeviceMsg('Could not request the link — check the connection.');
+    } finally { setDeviceBusy(false); }
+  }
 
   async function handleLogin(pinToUse) {
     const p = pinToUse ?? pin;
@@ -166,7 +213,9 @@ export default function LoginScreen({ onLogin }) {
     setLoading(true); setError(''); setSuccess('');
     try {
       const staff = await loginStaff(p);
-      if (staff?.error || !staff?.id) {
+      if (staff?.device_auth_required) {
+        setDeviceAuthNeeded(true); setPin('');
+      } else if (staff?.error || !staff?.id) {
         setError('Incorrect PIN. Please try again.'); setPin('');
       } else if (selectedStaff && staff.id !== selectedStaff.id) {
         setError(`That PIN isn't ${selectedStaff.name}'s. Check your name and PIN.`); setPin('');
@@ -218,6 +267,17 @@ export default function LoginScreen({ onLogin }) {
     } finally { setLoading(false); }
   }
 
+  // Shared landing for email/link sign-ins: store the session and, for
+  // manager-grade roles, flag the app to open on Admin — the owner came
+  // for the Back Office, not the floor map.
+  function finishEmailSession(r) {
+    try { localStorage.setItem('siamepos_auth', JSON.stringify({ token: r.token, staff: r.staff, expires_at: r.expires_at })); } catch {}
+    if (['admin', 'manager', 'supervisor'].includes(r.staff?.role)) {
+      try { localStorage.setItem('sepos_land_admin', '1'); } catch {}
+    }
+    onLogin(r.staff);
+  }
+
   async function handleEmailLogin() {
     if (!email || !password) return;
     setLoading(true); setError(''); setSuccess('');
@@ -226,13 +286,44 @@ export default function LoginScreen({ onLogin }) {
       if (r?.error || !r?.token || !r?.staff) {
         setError(r?.error || 'Invalid email or password.');
       } else {
-        try { localStorage.setItem('siamepos_auth', JSON.stringify({ token: r.token, staff: r.staff, expires_at: r.expires_at })); } catch {}
-        onLogin(r.staff);
+        finishEmailSession(r);
       }
     } catch {
       setError('Connection error. Check your network.');
     } finally { setLoading(false); }
   }
+
+  // SEPOS-OFFICE-001 — emailed one-tap sign-in link.
+  async function handleRequestLink() {
+    if (!email) { setError('Type your email first, then tap the link button.'); return; }
+    setLoading(true); setError(''); setSuccess('');
+    try {
+      const r = await requestLoginLink(email.trim());
+      if (r?.error) setError(r.error);
+      else setSuccess(r?.message || 'Check your email for the sign-in link.');
+    } catch {
+      setError('Connection error. Check your network.');
+    } finally { setLoading(false); }
+  }
+
+  // Arriving from the emailed link: #office?login_token=… — consume it once,
+  // sign in, and scrub the token from the address bar.
+  useEffect(() => {
+    const m = String(window.location.hash || '').match(/login_token=([a-f0-9]{64})/);
+    if (!m) return;
+    (async () => {
+      setLoading(true); setError('');
+      try {
+        const r = await consumeLoginLink(m[1]);
+        try { window.history.replaceState(null, '', window.location.pathname + '#office'); } catch {}
+        if (r?.error || !r?.token || !r?.staff) setError(r?.error || 'This sign-in link has expired — request a new one.');
+        else finishEmailSession(r);
+      } catch {
+        setError('Connection error. Check your network.');
+      } finally { setLoading(false); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function pressDigit(d) {
     if (loading) return;
@@ -296,7 +387,41 @@ export default function LoginScreen({ onLogin }) {
 
   // ── right content (staff grid / PIN / email) ───────────────────────────────
   let panelContent;
-  if (mustChange) {
+  if (deviceAuthNeeded) {
+    // SEPOS-DEVICE-AUTH-001 — this browser has not been authorised for the
+    // till. Email gate before the PIN pad ever works.
+    panelContent = (
+      <div style={{ maxWidth: 380, margin: '0 auto', width: '100%', textAlign: 'center' }}>
+        <div style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: INK }}>Authorise this device</div>
+        <p style={{ fontSize: 14, color: '#7C766A', margin: '10px 0 22px', lineHeight: 1.5 }}>
+          This till link needs a one-time email check before staff can sign in on this
+          device. Enter the owner or manager email — we'll send a link to tap
+          <b> on this device</b>.
+        </p>
+        <input
+          type="email"
+          value={deviceEmail}
+          onChange={(e) => setDeviceEmail(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') requestDeviceLink(); }}
+          placeholder="name@example.com"
+          style={{ width: '100%', boxSizing: 'border-box', padding: '14px 16px', borderRadius: 12,
+            border: `1.5px solid ${CARD_BORDER}`, fontSize: 16, textAlign: 'center', marginBottom: 12 }}
+        />
+        <button
+          onClick={requestDeviceLink}
+          disabled={deviceBusy || !deviceEmail.includes('@')}
+          style={{ width: '100%', padding: '14px 16px', borderRadius: 12, border: 'none',
+            background: deviceBusy || !deviceEmail.includes('@') ? '#cbd5e1' : NAVY, color: 'white',
+            fontSize: 16, fontWeight: 700, cursor: deviceBusy ? 'wait' : 'pointer' }}
+        >
+          {deviceBusy ? 'Sending…' : '📧 Send authorisation link'}
+        </button>
+        {deviceMsg && (
+          <p style={{ fontSize: 13, color: GOLD_ON_LIGHT, marginTop: 14, lineHeight: 1.5 }}>{deviceMsg}</p>
+        )}
+      </div>
+    );
+  } else if (mustChange) {
     // SEPOS-SEC-LOGIN — mandatory PIN change after signing in with the default.
     panelContent = (
       <div style={{ maxWidth: 340, margin: '0 auto', width: '100%', textAlign: 'center' }}>
@@ -319,16 +444,33 @@ export default function LoginScreen({ onLogin }) {
   } else if (mode === 'email') {
     panelContent = (
       <div style={{ maxWidth: 380, margin: '0 auto', width: '100%' }}>
+        {isOffice && (
+          <div style={{ display: 'inline-block', fontSize: 11, fontWeight: 800, letterSpacing: '1.2px', textTransform: 'uppercase',
+            color: GOLD_ON_LIGHT, background: GOLD_TINT, borderRadius: 20, padding: '5px 14px', marginBottom: 12 }}>
+            Back Office
+          </div>
+        )}
         <div style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: INK }}>Owner sign in</div>
-        <div style={{ color: MUTED, fontSize: 14, marginTop: 6, marginBottom: 22 }}>Sign in with your email and password.</div>
+        <div style={{ color: MUTED, fontSize: 14, marginTop: 6, marginBottom: 22 }}>
+          {isOffice
+            ? 'Your reports, bills and settings — from anywhere. Sign in with your email.'
+            : 'Sign in with your email and password.'}
+        </div>
         <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)}
           style={inputStyle} />
         <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleEmailLogin()} style={{ ...inputStyle, marginTop: 12 }} />
         <button onClick={handleEmailLogin} disabled={loading}
           style={{ ...primaryBtn, marginTop: 18 }}>{loading ? 'Signing in…' : 'Sign in'}</button>
+        {isOffice && (
+          <button onClick={handleRequestLink} disabled={loading}
+            title="No password needed — we email you a link that signs you in with one tap. Links work once and expire after 15 minutes."
+            style={{ ...outlineBtn, width: '100%', marginTop: 10 }}>
+            📧 Email me a sign-in link instead
+          </button>
+        )}
         {msg}
-        <button onClick={() => { setMode('pin'); setError(''); }} style={linkBtn}>‹ Back to staff PIN</button>
+        {!isOffice && <button onClick={() => { setMode('pin'); setError(''); }} style={linkBtn}>‹ Back to staff PIN</button>}
       </div>
     );
   } else if (clockMode) {

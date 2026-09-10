@@ -177,7 +177,7 @@ export default function TablePlanScreen() {
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>Capacity (seats)</label>
                 <input
-                  type="number"
+                  type="text" inputMode="decimal"
                   defaultValue={selectedTable.capacity}
                   key={selectedTable.id + '_cap'}
                   onBlur={e => updateSelected({ capacity: e.target.value })}

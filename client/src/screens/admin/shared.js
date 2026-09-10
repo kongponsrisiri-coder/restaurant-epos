@@ -1,10 +1,21 @@
 import { SERVER_URL } from '../../api';
 
 // ── Date helpers ──────────────────────────────
-export const today = new Date().toISOString().split('T')[0];
+// SEPOS-STALE-TODAY-001 — the date must be computed AT CALL TIME, in LOCAL
+// time. The old module-level `today` constant froze the date the moment the
+// app loaded, so a till left running overnight kept yesterday as "Today" on
+// every report preset (Fern, 22 Aug: Trading showed Friday's £4,588.82 on
+// Saturday morning). toISOString() is also wrong here: it formats in UTC, so
+// during BST anything computed between 00:00–01:00 — and every local
+// midnight-anchored date like "first of the month" — lands a day early.
+export const fmtLocalDate = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+export const todayStr = () => fmtLocalDate(new Date());
 
 export const getDateRange = (type, customFrom, customTo) => {
   const now = new Date();
+  const today = todayStr();
   // Custom range — operator picked specific dates from the date picker.
   // 'to' falls back to 'from' so a single-day pick is a one-day range.
   if (type === 'custom') {
@@ -15,11 +26,11 @@ export const getDateRange = (type, customFrom, customTo) => {
   if (type === 'today') return { from: today, to: today };
   if (type === 'weekly') {
     const from = new Date(now); from.setDate(now.getDate() - 7);
-    return { from: from.toISOString().split('T')[0], to: today };
+    return { from: fmtLocalDate(from), to: today };
   }
   if (type === 'monthly') {
     const from = new Date(now.getFullYear(), now.getMonth(), 1);
-    return { from: from.toISOString().split('T')[0], to: today };
+    return { from: fmtLocalDate(from), to: today };
   }
   return { from: today, to: today };
 };

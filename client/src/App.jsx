@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
-import { getRestaurant, getLicenseState, syncLocalOrders, getSettings, TENANT_MISCONFIGURED, getCurrentSession, isHostMode } from './api';
+import { getRestaurant, getLicenseState, syncLocalOrders, getSettings, TENANT_MISCONFIGURED, getCurrentSession, isHostMode, manualOpenDrawer } from './api';
 import { startHost } from './native/nodeHost';        // SEPOS host spike — no-op unless host mode
 import { applyBrandTheme } from './theme'; // SEPOS-BRAND-001 — per-client theme
 import { backupSalesToDevice } from './native/salesBackup'; // SEPOS-ANDROID-003
@@ -8,7 +8,7 @@ import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './ut
 import UpgradeLocked from './components/UpgradeLocked';
 import LoginScreen from './screens/LoginScreen';
 import SetupScreen from './screens/SetupScreen';          // SEPOS-ANDROID-001
-import { needsTenantSetup } from './native/tenant';       // SEPOS-ANDROID-001
+import { needsTenantSetup, probeTenant, getTenantUrl } from './native/tenant';  // SEPOS-ANDROID-001 / -RECONNECT-001
 import OnlineOrderPrinter from './native/OnlineOrderPrinter'; // SEPOS-ANDROID-001
 import TableMapScreen from './screens/TableMapScreen';
 import OrderScreen from './screens/OrderScreen';
@@ -20,11 +20,15 @@ import CounterScreen from './screens/CounterScreen';
 import SyncQueuePill from './components/SyncQueuePill';
 import OfflineBanner from './components/OfflineBanner';
 import Clock from './components/Clock';
-import AiHelpAssistant from './components/AiHelpAssistant'; // SEPOS-AI-HELP-001 — Admin-only, now in the top bar
+// SEPOS-AI-HELP-001 retired from the UI (Korakot, 25 Aug — "no one going to
+// use it, they still come to me directly"). Component + server endpoints kept
+// dormant; re-import AiHelpAssistant here to revive.
 import PrintAlertBanner from './components/PrintAlertBanner'; // SEPOS-PRINT-ALERT-001 — loud printer-down alerts
 import LockScreen from './screens/LockScreen';
+import CustomerDisplayScreen from './screens/CustomerDisplayScreen'; // SEPOS-CFD-001
 import OpenDayModal from './components/OpenDayModal'; // SEPOS-OPENDAY-001
 import OnScreenKeyboard from './components/OnScreenKeyboard'; // SEPOS-OSK-001 — touch-till keyboard
+import OrderChime from './components/OrderChime'; // SEPOS-ORDER-CHIME-001 — online-order arrival sound
 import './App.css';
 
 // ── Sandy: Lotus badge logo mark — replaces SVG flags ─────────────
@@ -52,7 +56,7 @@ const LogoBrand = () => (
       </g>
     </svg>
     {/* Wordmark */}
-    <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, letterSpacing: '-0.5px' }}>
+    <span className="brand-wordmark" style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, letterSpacing: '-0.5px' }}>
       <span style={{ color: 'white' }}>Siam</span><span style={{ color: 'var(--brand-accent,#C9A84C)' }}>EPOS</span>
     </span>
   </span>
@@ -68,14 +72,26 @@ function readCounterMode() {
 }
 
 export default function App() {
+  // SEPOS-CFD-001 — this browser window IS the customer-facing display
+  // (opened at <till-url>/#display on the second screen or a tablet). Render
+  // only the display and nothing else — no login, no till chrome.
+  if (typeof window !== 'undefined' && String(window.location.hash || '').startsWith('#display')) {
+    return <CustomerDisplayScreen />;
+  }
   const [staff, setStaff]               = useState(() => {
     // SEPOS-LITE-003 — restore a persisted email-login session (14-day
     // token) so a Lite owner isn't asked to sign in every day.
+    // SEPOS-047a-HEAL — the session must carry a TOKEN to be restorable. A
+    // session saved by a pre-token build (≤1.8.x) has staff + expiry but no
+    // token, and restoring it strands the operator: signed in on screen, 401
+    // "sign out and sign in again" on every gated save, and restarting only
+    // restores the same ghost (Fern, 17 Aug — two visits of it). Discard it
+    // once and the next real login stores a proper token.
     try {
       const raw = localStorage.getItem('siamepos_auth');
       if (raw) {
         const a = JSON.parse(raw);
-        if (a && a.staff && a.expires_at && a.expires_at > Date.now()) return a.staff;
+        if (a && a.staff && a.token && a.expires_at && a.expires_at > Date.now()) return a.staff;
         localStorage.removeItem('siamepos_auth');
       }
     } catch {}
@@ -130,8 +146,49 @@ export default function App() {
 
   // SEPOS-BRAND-001 — apply the tenant's brand colours app-wide at load. Safe
   // if it fails / is unset (falls back to the default SiamEPOS navy+gold).
+  // SEPOS-BRAND-BOOT-001 (Yum Yum, 23 Aug) — on a desktop till this single
+  // fetch RACES the embedded server's cold start, failed silently, and the
+  // brand only appeared after a manual Settings save. Retry until settings
+  // actually load, then keep the applied theme.
+  // SEPOS-KB-WAITER-001 — venues without a kitchen/bar display can make those
+  // roles sign in as waiters (land on the floor, normal navbar, idle sign-out).
+  // Their role hierarchy is untouched — Admin stays out of reach.
+  const [kbAsWaiters, setKbAsWaiters] = useState(true); // default ON — KDS venues opt out
+  // SEPOS-NAV-HIDE-001 — per-restaurant nav tab visibility. Default ALL shown
+  // (a missing key means shown), so shipping this changes nothing until a
+  // venue opts out in Settings → Navigation. Tables/Counter are special: one
+  // of them is always the till's home; Settings + the server refuse to hide
+  // both.
+  const [navVis, setNavVis] = useState({ reservations: true, kitchen: true, bar: true, tables: true, counter: true });
+  const readNavVis = (s) => ({
+    reservations: String(s.nav_show_reservations ?? '1') !== '0',
+    kitchen:      String(s.nav_show_kitchen      ?? '1') !== '0',
+    bar:          String(s.nav_show_bar          ?? '1') !== '0',
+    tables:       String(s.nav_show_tables       ?? '1') !== '0',
+    counter:      String(s.nav_show_counter      ?? '1') !== '0',
+  });
+  // The till's effective home: Tables hidden → the venue is counter-led and
+  // every landing goes to Counter, whatever the device's counter-mode flag;
+  // Counter hidden → always the floor. Otherwise the per-device flag decides.
+  const homeScreenKey = () =>
+    !navVis.tables ? 'counter'
+      : (readCounterMode() && navVis.counter) ? 'counter'
+      : 'tables';
   useEffect(() => {
-    getSettings().then(s => { if (s && !s.error) applyBrandTheme(s); }).catch(() => {});
+    let stopped = false;
+    const tryTheme = (attempt) => {
+      getSettings().then(s => {
+        if (stopped) return;
+        if (s && !s.error) {
+          applyBrandTheme(s);
+          setKbAsWaiters(String(s.kitchen_bar_as_waiters ?? '1') !== '0'); // SEPOS-KB-WAITER-001 — default ON unless explicitly '0'
+          setNavVis(readNavVis(s)); // SEPOS-NAV-HIDE-001
+        }
+        else if (attempt < 20) setTimeout(() => tryTheme(attempt + 1), 1500);
+      }).catch(() => { if (!stopped && attempt < 20) setTimeout(() => tryTheme(attempt + 1), 1500); });
+    };
+    tryTheme(0);
+    return () => { stopped = true; };
   }, []);
 
   // SEPOS-ANDROID-002 — push offline-created orders to the cloud whenever we're
@@ -171,6 +228,22 @@ export default function App() {
   // till is locked. Fails open everywhere else (cloud, or until the signing key
   // is deployed), so this never blocks a paying till or the web POS.
   const [licenseLock, setLicenseLock] = useState(null);
+  // SEPOS-ANDROID-RECONNECT-001 — native satellites only. Probe the saved host
+  // once at start; retry once after 3 s before declaring it gone, so a momentary
+  // wifi blip never throws staff onto the reconnect screen mid-service.
+  const [hostUnreachable, setHostUnreachable] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (needsTenantSetup()) return;
+      if (await probeTenant()) return;
+      await new Promise((r) => setTimeout(r, 3000));
+      if (cancelled) return;
+      if (await probeTenant()) return;
+      if (!cancelled) setHostUnreachable(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => {
     let alive = true;
     const poll = async () => {
@@ -266,6 +339,11 @@ export default function App() {
   const logout = () => {
     try { localStorage.removeItem('siamepos_auth'); } catch {}
     setStaff(null);
+    // SEPOS-LOGOUT-HOME-001 (Korakot, 24 Aug) — the selected screen survived
+    // sign-out, so whoever signed in next landed wherever the LAST person was
+    // (e.g. the Kitchen tab). Every fresh sign-in now starts from home.
+    setScreen(homeScreenKey()); // SEPOS-NAV-HIDE-001 — home respects hidden tabs
+    setActiveOrder(null);
   };
 
   // ── SEPOS-TILL-LOCK-001 — till security ─────────────────────────────
@@ -287,9 +365,28 @@ export default function App() {
     warnStart.current = 0;
     setIdleWarn(false);
     setActiveOrder(null);
-    setScreen(readCounterMode() ? 'counter' : 'tables'); // counter tills come back to counter
+    setScreen(homeScreenKey()); // counter tills come back to counter; SEPOS-NAV-HIDE-001 — respects hidden tabs
     setStaff(null);
   };
+
+  // SEPOS-OFFICE-001 — an owner who signed in via email / a Back Office
+  // sign-in link came for reports and settings, not the floor map: land
+  // them straight on Admin. One-shot flag set by LoginScreen; roles below
+  // manager never get the flag, so the floor experience is untouched.
+  useEffect(() => {
+    if (!staff) return;
+    let land = null;
+    try { land = localStorage.getItem('sepos_land_admin'); localStorage.removeItem('sepos_land_admin'); } catch {}
+    if (land === '1' && ['admin', 'manager', 'supervisor'].includes(staff.role)) setScreen('admin');
+  }, [staff]);
+
+  // SEPOS-NAV-HIDE-001 — if the screen someone is ON becomes hidden (admin
+  // toggled it; settings refreshed at sign-in or boot), bounce to home rather
+  // than stranding them on an unreachable tab. Admin and order flow are never
+  // hidden, so this only ever fires for the five toggleable tabs.
+  useEffect(() => {
+    if (navVis[screen] === false) setScreen(homeScreenKey());
+  }, [navVis, screen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load the till-security settings on each sign-in (so Settings edits take
   // effect from the next login, no reload needed).
@@ -301,6 +398,7 @@ export default function App() {
           sendLock: s.till_send_lock !== '0',
           idleMin:  parseInt(s.till_idle_minutes ?? '2', 10) || 0,
         });
+        setNavVis(readNavVis(s)); // SEPOS-NAV-HIDE-001 — Settings edits take effect from the next sign-in
       }
     }).catch(() => {});
   }, [staff]);
@@ -310,7 +408,7 @@ export default function App() {
   // unsent basket state lives in OrderScreen and is intentionally kept on the
   // table as a draft (items not sent are re-shown when the table reopens).
   useEffect(() => {
-    if (!staff || staff.role === 'kitchen' || staff.role === 'bar' || !tillSec.idleMin) return;
+    if (!staff || (!kbAsWaiters && (staff.role === 'kitchen' || staff.role === 'bar')) || !tillSec.idleMin) return;
     lastActivity.current = Date.now();
     const bump = (ev) => {
       lastActivity.current = Date.now();
@@ -324,7 +422,10 @@ export default function App() {
         warnStart.current = 0; setIdleWarn(false);
       }
     };
-    const evs = ['pointerdown', 'keydown', 'touchstart', 'wheel'];
+    // SEPOS-IDLE-DRAG-001 (Korakot on-site, 24 Aug) — dragging tables around
+    // the plan editor fired no pointerdown for minutes at a time and the idle
+    // timer signed the operator out mid-setup. Moves now count as activity.
+    const evs = ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'touchmove', 'wheel'];
     evs.forEach((e) => window.addEventListener(e, bump, { capture: true, passive: true }));
     const t = setInterval(() => {
       if (!warnStart.current) {
@@ -424,15 +525,27 @@ export default function App() {
     return <SetupScreen onConfigured={() => window.location.reload()} />;
   }
 
+  // SEPOS-ANDROID-RECONNECT-001 — the saved host answered nothing. Its DHCP
+  // address has almost certainly moved (router restart). Offer the scanner
+  // rather than leaving a dead app that staff can only fix by wiping data.
+  if (hostUnreachable) {
+    return <SetupScreen reconnect currentUrl={getTenantUrl()} onConfigured={() => window.location.reload()} />;
+  }
+
   // ── Determine body ────────────────────────────────────────────
   let body;
 
   if (!staff) {
     body = <LoginScreen onLogin={setStaff} />;
-  } else if (staff.role === 'kitchen') {
-    body = <><Clock fixed /><KitchenScreen /></>;
-  } else if (staff.role === 'bar') {
-    body = <><Clock fixed /><BarScreen /></>;
+  } else if (staff.role === 'kitchen' && !kbAsWaiters) {
+    // SEPOS-KDS-LOGOUT-001 — kitchen/bar render full-bleed with no navbar and
+    // are exempt from idle auto sign-out, so without this they can only leave
+    // by restarting the app (Fern, 17 Aug). SEPOS-KB-WAITER-001: when the
+    // venue has no kitchen/bar display, both roles fall through to the normal
+    // waiter shell instead.
+    body = <><Clock fixed /><KitchenScreen onLogout={logout} /></>;
+  } else if (staff.role === 'bar' && !kbAsWaiters) {
+    body = <><Clock fixed /><BarScreen onLogout={logout} /></>;
   } else if (screen === 'order' && activeOrder) {
     body = (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f5f5f5' }}>
@@ -441,7 +554,7 @@ export default function App() {
           <div className="navbar-user">
             <Clock />
             <StatusBadge />
-            <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
+            <span className="nav-staff-name" style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
             <button className="logout-btn" onClick={logout}>Log out</button>
           </div>
         </nav>
@@ -453,7 +566,7 @@ export default function App() {
               staff={staff}
               onClose={() => {
                 setActiveOrder(null);
-                setScreen('tables');
+                setScreen(homeScreenKey()); // SEPOS-NAV-HIDE-001 — back to the venue's home, not hard-coded tables
               }}
               /* SEPOS-TILL-LOCK-001 — after a successful send, OrderScreen
                  flashes "✓ sent" then calls this to return to the PIN screen.
@@ -478,20 +591,24 @@ export default function App() {
       fullEPOS:     canAccessFullEPOS(plan),       // dine-in ordering/billing, Counter, Bar
     };
     // Counter mode is a dine-in (full EPOS) feature.
-    const effectiveCounter = counterMode && caps.fullEPOS;
+    // SEPOS-NAV-HIDE-001 — Tables hidden forces counter as home regardless of
+    // the per-device flag; Counter hidden pins home to the floor.
+    const effectiveCounter = caps.fullEPOS && (!navVis.tables || (counterMode && navVis.counter));
     const homeItem = effectiveCounter
       ? { key: 'counter', label: '🛒 Counter', locked: false }
       : { key: 'tables',  label: '🗺️ Tables',  locked: !(caps.reservations || caps.fullEPOS) };
     // Every tab still shows; tabs the plan doesn't include are marked
     // locked and open a friendly "upgrade" panel when clicked.
+    // SEPOS-NAV-HIDE-001 — tabs the VENUE hid are gone entirely (hidden beats
+    // plan-locked: no greyed ghost of a hidden tab).
     const navItems = [
       homeItem,
-      { key: 'reservations', label: '🗓️ Reservations', locked: !caps.reservations },
+      ...(navVis.reservations ? [{ key: 'reservations', label: '🗓️ Reservations', locked: !caps.reservations }] : []),
       ...(staff.role === 'admin' || staff.role === 'manager' || staff.role === 'supervisor' || staff.can_close_z
         ? [{ key: 'admin', label: staff.role === 'admin' || staff.role === 'manager' || staff.role === 'supervisor' ? '⚙️ Admin' : '🔐 Close Day', locked: false }]
         : []),
-      { key: 'kitchen', label: '🍳 Kitchen', locked: !caps.kitchen },
-      { key: 'bar',     label: '🍹 Bar',     locked: !caps.fullEPOS },
+      ...(navVis.kitchen ? [{ key: 'kitchen', label: '🍳 Kitchen', locked: !caps.kitchen }] : []),
+      ...(navVis.bar     ? [{ key: 'bar',     label: '🍹 Bar',     locked: !caps.fullEPOS }] : []),
     ];
 
     const toggleCounterMode = () => {
@@ -534,15 +651,38 @@ export default function App() {
 
           <div className="navbar-user">
             <Clock />
-            {/* SEPOS-AI-HELP-001 — Ask AI sits in the top bar next to the clock
-                (Admin only), so it no longer floats over page content. */}
-            {screen === 'admin' && <AiHelpAssistant variant="topbar" />}
+            {/* SEPOS-DRAWER-002 — one-tap no-sale drawer open (Baanrai's ask),
+                floor/counter only: change-making happens BETWEEN orders, so it
+                must work without opening a table. Stamped with the staff name
+                server-side. Alerts only when the kick can't fire (cloud-only
+                browser till or no receipt printer). */}
+            {(screen === 'tables' || screen === 'counter') && (
+              <button
+                onClick={async () => {
+                  try {
+                    const r = await manualOpenDrawer(staff?.name);
+                    if (!r?.success) window.alert(r?.skipped === 'not a local till'
+                      ? 'The drawer can only be opened from the till itself.'
+                      : 'Could not open the drawer — check the receipt printer.');
+                  } catch { window.alert('Could not open the drawer — check the receipt printer.'); }
+                }}
+                title="Open cash drawer"
+                style={{ background: 'rgba(255,255,255,0.12)', color: 'white',
+                  border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6,
+                  padding: isMobile ? '5px 9px' : '6px 12px', fontSize: isMobile ? 11 : 12,
+                  fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                💵{isMobile ? '' : ' Drawer'}
+              </button>
+            )}
             <StatusBadge />
             {/* SEPOS-044 — always-visible pill when anything is queued. */}
             <SyncQueuePill compact={isMobile} />
             {/* SEPOS-045 — counter/floor mode toggle. Per-device flag.
-                SEPOS-LITE-002 — dine-in only, hidden for lite plans. */}
-            {caps.fullEPOS && (
+                SEPOS-LITE-002 — dine-in only, hidden for lite plans.
+                SEPOS-NAV-HIDE-001 — pointless when either home tab is hidden
+                (the venue has already picked its one home). */}
+            {caps.fullEPOS && navVis.tables && navVis.counter && (
               <button
                 onClick={toggleCounterMode}
                 title={counterMode ? 'Switch to floor (dine-in) mode' : 'Switch to counter (till) mode'}
@@ -558,7 +698,7 @@ export default function App() {
                 {counterMode ? '🛒 Counter' : '🏠 Floor'}
               </button>
             )}
-            <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
+            <span className="nav-staff-name" style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
             <button className="logout-btn" onClick={logout}>Log out</button>
           </div>
         </nav>
@@ -631,6 +771,14 @@ export default function App() {
       <OfflineBanner />{/* SEPOS-ANDROID-002 — only visible when internet drops */}
       {body}
       <OnScreenKeyboard />{/* SEPOS-OSK-001 — pops for text fields on touch tills */}
+      {/* SEPOS-ORDER-CHIME-001 — rings + banners on every new online order
+          (widget/Deliveroo/QR) until acknowledged. Tap jumps to the Kitchen
+          tab when the venue shows it (takeaway orders live there), else home;
+          on the login screen it just silences (nobody to navigate). Never on
+          the customer display — that route early-returns above. */}
+      <OrderChime onOpen={() => {
+        if (staff) setScreen(navVis.kitchen ? 'kitchen' : homeScreenKey());
+      }} />
       {/* SEPOS-OPENDAY-001 — first-login-of-the-day "Open the day" prompt. Only
           renders on a positive {session:null}; fail-open + Skip keep it from ever
           bricking the floor. Sits after {body}; the licenseLock / tenant-setup

@@ -185,7 +185,24 @@ async function dispatchPrint({ settings, serverFn, html, copies = 1, popupWin = 
     const route = native.kind === 'bar' ? 'bar' : 'kitchen';
     const ip   = settings?.[`printer_${route}_ip`]   || settings?.printer_receipt_ip;
     const port = settings?.[`printer_${route}_port`] || settings?.printer_receipt_port || 9100;
-    await nativeKitchenPrint({ native, copies, ip, port, target: printTarget(settings, route), settings });
+    const target = printTarget(settings, route);
+    // SEPOS-ANDROID-SERVERPRINT-001 (Korakot, 10 Sep) — "make the satellite work
+    // like the browser". When the till this device talks to can reach a NETWORK
+    // printer, ask IT to render + send (serverFn) — exactly what the browser does,
+    // using the server's nice rendered raster, so the satellite matches the main
+    // till with no server rebuild. Fall back to the on-device push only for a
+    // Sunmi built-in printer (server can't reach it) or if the server can't be
+    // reached / can't reach the printer (e.g. pointed at the cloud).
+    const sunmi = (target === 'builtin' || target === 'auto') ? await sunmiAvailable() : false;
+    if (!sunmi && ip && serverFn) {
+      try {
+        const r = await serverFn(undefined, copies);
+        if (r && r.success) return;
+        if (r && r.held) { console.warn('[kitchen-ticket] ticket HELD by the server — banner offers retry/redirect'); return; }
+        console.warn('[kitchen-ticket] server print did not succeed, on-device fallback:', r?.error || r?.reason);
+      } catch (e) { console.warn('[kitchen-ticket] server print error, on-device fallback:', e?.message || e); }
+    }
+    await nativeKitchenPrint({ native, copies, ip, port, target, settings });
     return;
   }
 
@@ -253,8 +270,15 @@ function resolveKitchenCopies(settings) {
 
 // ── Public: print ALL courses on one ticket (called on Send Order) ────────────
 // popupWin: pre-opened window from the calling code (to beat popup blocker).
-export async function printFullOrderTicket({ order, items, popupWin = null }) {
-  const active = (items || []).filter(i => i && !i.voided && !i.is_bar);
+// SEPOS-SENTBY-002 — the DB rows get sent_by stamped by api.js on send, but
+// the PRINT payload is the caller's own un-stamped copy of the items, so the
+// ticket's "Sent: NAME" line never rendered on live tills (Fern, 17-18 Aug —
+// cloud data stamped, paper blank). Every items-carrying print entry point now
+// stamps from the signed-in staff the caller passes.
+const stampSentBy = (arr, sentBy) => (sentBy ? arr.map(i => ({ ...i, sent_by: i.sent_by || sentBy })) : arr);
+
+export async function printFullOrderTicket({ order, items, popupWin = null, sentBy = null }) {
+  const active = stampSentBy((items || []).filter(i => i && !i.voided && !i.is_bar), sentBy);
   if (active.length === 0) { closeWin(popupWin); return; }
 
   const settings = await getCachedSettings();
@@ -297,8 +321,8 @@ export async function printFullOrderTicket({ order, items, popupWin = null }) {
 
 // ── Public: print a single course (called when a course is fired) ─────────────
 // popupWin must be pre-opened by the caller before any awaits.
-export async function printKitchenTicket({ order, items, course, popupWin = null }) {
-  const active = (items || []).filter(i => i && !i.voided);
+export async function printKitchenTicket({ order, items, course, popupWin = null, sentBy = null }) {
+  const active = stampSentBy((items || []).filter(i => i && !i.voided), sentBy);
   if (active.length === 0) { closeWin(popupWin); return; }
 
   const settings = await getCachedSettings();
@@ -371,8 +395,8 @@ export async function printFireNoticeTicket({ order, course, popupWin = null }) 
 // ── Public: print bar items to bar printer (called on Send Order) ─────────────
 // popupWin: pre-opened window from sendOrder (opened before async work so the
 // browser does not block the popup as an unattended window.open call).
-export async function printBarOrderTicket({ order, items, popupWin = null }) {
-  const barItems = (items || []).filter(i => i && !i.voided && i.is_bar);
+export async function printBarOrderTicket({ order, items, popupWin = null, sentBy = null }) {
+  const barItems = stampSentBy((items || []).filter(i => i && !i.voided && i.is_bar), sentBy);
   if (barItems.length === 0) { closeWin(popupWin); return; }
 
   const settings = await getCachedSettings();
@@ -465,10 +489,9 @@ function itemsHTML(items, bilingual = false) {
     return `
     <div class="item">
       <span class="qty">${Number(i.quantity) || 1}×</span>
-      <span class="name">${esc(i.name || i.item_name || 'Item')}</span>
+      <span class="name">${esc(i.name || i.item_name || 'Item')}${i.notes ? ' — ' + esc(i.notes) : ''}</span>
     </div>
     ${nameAlt ? `<div class="note-alt">${esc(nameAlt)}</div>` : ''}
-    ${i.notes ? `<div class="note">▸ ${esc(i.notes)}</div>` : ''}
   `;
   }).join('');
 }
@@ -588,7 +611,7 @@ function buildFireNoticeHTML({ order, course, bilingual = true }) {
   const body = `
     <div class="head">${esc(heading)}</div>
     <div class="rule"></div>
-    <div class="fire">🔥 FIRE</div>
+    <div class="fire">🔥 CALL</div>
     <div class="course-en">${courseEN}</div>
     ${courseTH ? `<div class="course-th">${courseTH}</div>` : ''}
     <div class="rule"></div>

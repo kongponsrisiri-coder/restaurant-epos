@@ -225,7 +225,7 @@ function ItemName({ item, showAlt, altLang }) {
   );
 }
 
-export default function KitchenScreen() {
+export default function KitchenScreen({ onLogout }) {
   const [orders, setOrders] = useState([]);
   const [completedItems, setCompletedItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -324,7 +324,7 @@ export default function KitchenScreen() {
         else if (courseNum === 2) playSound('mains');
         else if (courseNum === 3) playSound('desserts');
         else playSound('default');
-        setNotification(`🔥 ${orderShortLabelPlain(data.order)} — ${courseLabel} fired!`);
+        setNotification(`🔥 ${orderShortLabelPlain(data.order)} — ${courseLabel} called!`);
         setTimeout(() => setNotification(null), 6000);
       }
     });
@@ -501,6 +501,13 @@ export default function KitchenScreen() {
           <button onClick={() => { fetchOrders(); fetchCompleted(); }} style={{ background: '#333', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer' }}>
             ↻
           </button>
+          {/* SEPOS-KDS-LOGOUT-001 — kitchen role has no navbar and no idle
+              auto sign-out; this is its only way out besides quitting the app. */}
+          {onLogout && (
+            <button onClick={onLogout} style={{ background: '#333', color: '#f87171', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+              Log out
+            </button>
+          )}
         </div>
       </div>
 
@@ -710,7 +717,7 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
         letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 8
       }}>
         <span style={{ background: '#f59e0b', color: '#111', padding: '3px 10px', borderRadius: 20, fontSize: 11 }}>
-          ⏳ PENDING — WAITING TO FIRE
+          ⏳ PENDING — WAITING TO CALL
         </span>
         <span style={{ color: '#6b7280', fontSize: 11 }}>{upcoming.length} item{upcoming.length > 1 ? 's' : ''}</span>
       </div>

@@ -130,7 +130,7 @@ function KitchenTemplatesCard({ cardStyle }) {
               </label>
               <label style={{ fontSize:12, fontWeight:700, color:'#555' }}>
                 Sort order (lower = appears first)
-                <input value={editing.sort_order || 100} type="number"
+                <input value={editing.sort_order || 100} type="text" inputMode="decimal"
                   onChange={e => setEditing({ ...editing, sort_order: Number(e.target.value) || 100 })}
                   style={{ marginTop:5, width:120, padding:10, borderRadius:8, border:'1px solid #ddd', fontSize:14, boxSizing:'border-box' }} />
               </label>
@@ -743,6 +743,12 @@ function BarCategoryManager() {
 
 
 export default function SettingsSection() {
+  // SEPOS-DEVICE-AUTH-001 — confirm before ARMING the device gate (Till Security card).
+  // NB: must live HERE, in SettingsSection — the card and its modal both render in this
+  // component. A first pass declared it in KitchenTemplatesCard higher up the file; the
+  // build passed and the Settings page died at runtime with 'confirmDeviceAuth is not
+  // defined'. Caught by loading the page, not by compiling it.
+  const [confirmDeviceAuth, setConfirmDeviceAuth] = useState(false);
   const [settings, setSettings] = useState({
     company_name:            '',
     company_address:         '',
@@ -757,7 +763,18 @@ export default function SettingsSection() {
     service_charge_enabled:  '1',
     till_send_lock:          '1',   // SEPOS-TILL-LOCK-001 — back to sign-in after sending an order
     login_pin_only:          '0',   // SEPOS-PINONLY-001 — skip the name grid; PIN identifies the staff
+    kitchen_bar_as_waiters:  '1',   // SEPOS-KB-WAITER-001 — DEFAULT ON; KDS venues (Fern) untick
     till_idle_minutes:       '2',   // SEPOS-TILL-LOCK-001 — auto sign-out after idle ('0' = off)
+    require_device_auth:     '0',   // SEPOS-DEVICE-AUTH-001 — email-authorise each device before PIN sign-in
+    nav_show_reservations:   '1',   // SEPOS-NAV-HIDE-001 — navbar tab visibility, default all shown
+    nav_show_kitchen:        '1',
+    nav_show_bar:            '1',
+    nav_show_tables:         '1',   // home guard: tables + counter can never BOTH be hidden
+    nav_show_counter:        '1',
+    online_order_chime:      '1',   // SEPOS-ORDER-CHIME-001 — repeat-until-ack arrival sound, default ON
+    qr_payment_policy:       'pay_first',   // SEPOS-QR-PAYLATER-001 — QR table ordering: pay_first | pay_later
+    takeaway_pay_mode:       '',            // SEPOS-TA-CHOICE-001 — '' auto | 'collection' | 'choice'
+    takeaway_discount_min_total: '',        // SEPOS-TA-PROMO-001 — promo spend threshold (£)
     kitchen_print_mode:      'print',   // 'print' | 'kds' | 'both'
     kitchen_language:        'en_th',  // 'en_th' | 'en'
     brand_logo:              '',   // SEPOS-BRAND-001 — on-screen logo (separate from receipt logo)
@@ -1327,11 +1344,13 @@ export default function SettingsSection() {
       <div style={cardStyle}>
         <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>⌨️ On-screen keyboard</h2>
         <p style={{ fontSize:13, color:'#777', marginBottom:14 }}>
-          Shows a keyboard on screen for typing names, notes and searches when this
-          device has no physical keyboard. This setting is for <strong>this device only</strong>.
+          Shows a keyboard on screen for typing names, notes, searches and prices when
+          this device has no physical keyboard — with English and ไทย layouts (🌐 key),
+          and a number pad on price / quantity boxes. On the desktop till app it is
+          available out of the box. This setting is for <strong>this device only</strong>.
         </p>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          {[['auto','Auto (touch screens)'], ['on','Always on'], ['off','Off']].map(([val, lbl]) => (
+          {[['auto','Auto (till app / touch screens)'], ['on','Always on'], ['off','Off']].map(([val, lbl]) => (
             <button key={val} onClick={() => { try { localStorage.setItem('onscreen_keyboard_mode', val); } catch {} setOskMode(val); }}
               style={{ padding:'10px 16px', borderRadius:10, fontSize:14, fontWeight:700, cursor:'pointer',
                 border: oskMode===val ? '2px solid var(--brand-primary,#0D1B3E)' : '1px solid #ddd',
@@ -1362,6 +1381,12 @@ export default function SettingsSection() {
             PIN-only sign-in <span style={{ fontSize:12, color:'#888', fontWeight:400 }}>— skip the name list; staff just type their PIN and the till knows who they are (each PIN must be unique)</span>
           </label>
         </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display:'flex', alignItems:'center', gap:10, fontSize:15, fontWeight:600, cursor:'pointer' }}>
+            <input type="checkbox" checked={(settings.kitchen_bar_as_waiters ?? '1') !== '0'} onChange={e => setSettings({...settings, kitchen_bar_as_waiters:e.target.checked?'1':'0'})} />
+            Kitchen &amp; bar staff sign in as waiters <span style={{ fontSize:12, color:'#888', fontWeight:400 }}>— for venues without a kitchen/bar display: those roles land on the floor like waiters (Admin stays locked for them). Leave off if you use the Kitchen or Bar screens.</span>
+          </label>
+        </div>
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:8 }}>
           <label style={{ fontSize:14, fontWeight:600, color:'#555' }}>Auto sign-out when idle</label>
           <select value={settings.till_idle_minutes||'2'} onChange={e => setSettings({...settings, till_idle_minutes:e.target.value})}
@@ -1377,6 +1402,168 @@ export default function SettingsSection() {
           Staff sign back in with their PIN in seconds. Unsent basket items are kept on the table.
           Kitchen and Bar displays are never signed out automatically.
         </div>
+
+        {/* ── SEPOS-DEVICE-AUTH-001 — the switch for the email-authorised device gate.
+            The server side shipped in v1.9.41 but had NO user interface at all: the
+            only way to set it was an authenticated API call with the tenant's sync
+            secret, which meant nobody could see whether it was on and nobody could
+            turn it OFF in a hurry. That is the wrong shape for a switch that blocks
+            every sign-in, so it gets a visible state and a one-click off.
+
+            Turning it ON is confirmed, deliberately: the moment it saves, EVERY
+            device at this venue is locked out until someone standing at that device
+            completes the email round-trip. Turning it OFF needs no confirmation —
+            the safe direction should never be obstructed. */}
+        <div style={{ marginTop:18, paddingTop:16, borderTop:'1px solid #eee' }}>
+          <label style={{ display:'flex', alignItems:'flex-start', gap:10, fontSize:15, fontWeight:600, cursor:'pointer' }}>
+            <input
+              type="checkbox"
+              style={{ marginTop:3 }}
+              checked={settings.require_device_auth === '1'}
+              onChange={(e) => {
+                // Switching OFF is the safe direction — never obstruct it.
+                if (!e.target.checked) { setSettings({ ...settings, require_device_auth: '0' }); return; }
+                setConfirmDeviceAuth(true);   // switching ON asks first (modal below)
+              }}
+            />
+            <span>
+              Require email authorisation for new devices
+              <span style={{ display:'block', fontSize:12, color:'#888', fontWeight:400, marginTop:4, lineHeight:1.5 }}>
+                Stops anyone who finds this till&rsquo;s web address from reaching the PIN pad at all.
+                Each device is authorised once by email (owner, manager or supervisor) and stays
+                trusted for 180 days. Applies to browser tills and the tablet app — desktop tills
+                on this venue&rsquo;s own computer are never affected.
+              </span>
+              {settings.require_device_auth === '1' && (
+                <span style={{ display:'block', marginTop:8, fontSize:12.5, lineHeight:1.5,
+                  background:'#FEF3C7', border:'1px solid #FCD34D', color:'#92400E',
+                  borderRadius:8, padding:'8px 10px', fontWeight:600 }}>
+                  ⚠ On. A device that clears its browser data — or has not signed in for 180 days —
+                  will need authorising again. Untick and Save to switch it off immediately.
+                </span>
+              )}
+            </span>
+          </label>
+        </div>
+      </div>
+
+      {/* SEPOS-DEVICE-AUTH-001 — arming confirmation. A React modal rather than
+          window.confirm: confirm() is a native dialog that renders inconsistently
+          inside the Android WebView and blocks the whole UI thread, and this needs
+          to spell out a consequence too long for a one-line browser prompt. */}
+      {confirmDeviceAuth && (
+        <div
+          data-testid="device-auth-confirm"
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:10000,
+            display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={() => setConfirmDeviceAuth(false)}
+        >
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ background:'#fff', borderRadius:16, maxWidth:520, width:'100%',
+              padding:'26px 26px 22px', boxShadow:'0 20px 60px rgba(0,0,0,0.35)' }}>
+            <h3 style={{ margin:'0 0 12px', fontSize:19, fontWeight:800, color:'#0D1B3E' }}>
+              Require email authorisation on every device?
+            </h3>
+            <p style={{ margin:'0 0 12px', fontSize:14.5, lineHeight:1.6, color:'#334155' }}>
+              When you <b>Save</b>, nobody at this venue can sign in with a PIN until each device
+              has been authorised once by email.
+            </p>
+            <p style={{ margin:'0 0 12px', fontSize:14.5, lineHeight:1.6, color:'#334155' }}>
+              On every till and tablet, someone must enter an owner, manager or supervisor email,
+              then open the emailed link <b>on that device</b> and tap Authorise. Each device then
+              stays trusted for 180 days.
+            </p>
+            <div style={{ background:'#FEF2F2', border:'1px solid #FCA5A5', color:'#991B1B',
+              borderRadius:10, padding:'10px 13px', fontSize:13.5, fontWeight:700, lineHeight:1.5,
+              marginBottom:20 }}>
+              Do not switch this on during service — staff will be locked out mid-shift.
+            </div>
+            <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+              <button data-testid="device-auth-cancel"
+                onClick={() => setConfirmDeviceAuth(false)}
+                style={{ padding:'11px 20px', borderRadius:10, border:'1px solid #ddd',
+                  background:'#fff', fontSize:14.5, fontWeight:700, cursor:'pointer', color:'#334155' }}>
+                Cancel
+              </button>
+              <button data-testid="device-auth-arm"
+                onClick={() => { setSettings({ ...settings, require_device_auth: '1' }); setConfirmDeviceAuth(false); }}
+                style={{ padding:'11px 20px', borderRadius:10, border:'none', background:'#B91C1C',
+                  color:'#fff', fontSize:14.5, fontWeight:800, cursor:'pointer' }}>
+                Turn it on
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── SEPOS-NAV-HIDE-001 — Navigation tabs ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:8 }}>🧭 Navigation</h2>
+        <div style={{ fontSize:12, color:'#888', lineHeight:1.5, marginBottom:14 }}>
+          Untick a screen your venue doesn't use to remove its button from the top bar on every till.
+          Hiding a screen does NOT switch the feature off — online bookings still arrive with Reservations hidden,
+          and kitchen printing/routing carries on with Kitchen hidden. Takes effect from each till's next sign-in.
+        </div>
+        {[
+          ['nav_show_tables',       '🗺️ Tables (floor map)'],
+          ['nav_show_counter',      '🛒 Counter'],
+          ['nav_show_reservations', '🗓️ Reservations'],
+          ['nav_show_kitchen',      '🍳 Kitchen'],
+          ['nav_show_bar',          '🍹 Bar'],
+        ].map(([key, label]) => (
+          <div key={key} style={{ marginBottom:10 }}>
+            <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:14 }}>
+              <input
+                type="checkbox"
+                checked={(settings[key] ?? '1') !== '0'}
+                onChange={e => {
+                  const on = e.target.checked;
+                  // Home guard — the till always needs Tables or Counter to land on.
+                  if (!on && key === 'nav_show_tables' && (settings.nav_show_counter ?? '1') === '0') {
+                    alert('The till needs at least one home screen — show Counter before hiding Tables.'); return;
+                  }
+                  if (!on && key === 'nav_show_counter' && (settings.nav_show_tables ?? '1') === '0') {
+                    alert('The till needs at least one home screen — show Tables before hiding Counter.'); return;
+                  }
+                  setSettings({ ...settings, [key]: on ? '1' : '0' });
+                }}
+              />
+              {label}
+            </label>
+          </div>
+        ))}
+      </div>
+
+      {/* ── SEPOS-QR-PAYLATER-001 — QR table ordering payment policy ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:8 }}>📱 QR Table Ordering — Payment</h2>
+        <div style={{ fontSize:12, color:'#888', lineHeight:1.5, marginBottom:12 }}>
+          How customers pay when they order from the QR code at the table. Online takeaway ordering and vouchers are separate and unaffected.
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, maxWidth:520 }}>
+          {[['pay_first','💳 Pay now','Customer pays on their phone when ordering (card / Apple Pay / Google Pay)'],
+            ['pay_later','🧾 Pay at the till','Customer just orders — staff take payment at the table or till, like a normal bill']].map(([val, label, hint]) => (
+            <button key={val} onClick={() => setSettings({ ...settings, qr_payment_policy: val })} style={{
+              padding:'12px', borderRadius:10, textAlign:'left', cursor:'pointer',
+              border:'2px solid ' + (((settings.qr_payment_policy ?? 'pay_first') === val) ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0'),
+              background:((settings.qr_payment_policy ?? 'pay_first') === val) ? 'var(--brand-primary, #1a1a2e)' : 'white',
+              color:((settings.qr_payment_policy ?? 'pay_first') === val) ? 'white' : '#555',
+            }}>
+              <div style={{ fontWeight:800, fontSize:14 }}>{label}</div>
+              <div style={{ fontSize:11, opacity:0.85, marginTop:4 }}>{hint}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── SEPOS-ORDER-CHIME-001 — Online order alert ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:8 }}>🔔 Online Order Alert</h2>
+        <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:14 }}>
+          <input type="checkbox" checked={(settings.online_order_chime ?? '1') !== '0'} onChange={e => setSettings({...settings, online_order_chime:e.target.checked?'1':'0'})} />
+          Play a repeating chime on every till when an online order arrives
+          <span style={{ fontSize:12, color:'#888', fontWeight:400 }}>— rings every ~25 seconds until someone taps the alert banner. Covers the ordering widget, QR table orders and Deliveroo. Never plays on the customer display.</span>
+        </label>
       </div>
 
       {/* ── Service Charge ── */}
@@ -1390,7 +1577,7 @@ export default function SettingsSection() {
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           <label style={{ fontSize:14, fontWeight:600, color:'#555' }}>Service charge %</label>
-          <input value={settings.service_charge_rate||'12.5'} onChange={e => setSettings({...settings, service_charge_rate:e.target.value})} type="number" step="0.5" min="0" max="30" style={{ width:100, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }} />
+          <input value={settings.service_charge_rate||'12.5'} onChange={e => setSettings({...settings, service_charge_rate:e.target.value})} type="text" inputMode="decimal" step="0.5" min="0" max="30" style={{ width:100, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }} />
         </div>
         <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Standard UK rate is 12.5%. This is optional and always shown separately on the bill.</div>
       </div>
@@ -1441,7 +1628,7 @@ export default function SettingsSection() {
             <input
               value={settings.delivery_radius_miles || ''}
               onChange={e => setSettings({ ...settings, delivery_radius_miles: e.target.value })}
-              type="number" step="0.5" min="0" max="20"
+              type="text" inputMode="decimal" step="0.5" min="0" max="20"
               placeholder="e.g. 3"
               style={{ width:120, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}
             />
@@ -1463,13 +1650,49 @@ export default function SettingsSection() {
           <input
             value={settings.takeaway_discount_percent || ''}
             onChange={e => setSettings({ ...settings, takeaway_discount_percent: e.target.value })}
-            type="number" step="1" min="0" max="50"
+            type="text" inputMode="decimal" step="1" min="0" max="50"
             placeholder="e.g. 10"
             style={{ width:120, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}
           />
         </div>
+        <div style={{ marginTop:14 }}>
+          <label style={{ fontSize:14, fontWeight:600, color:'#555', display:'block', marginBottom:6 }}>Only on orders over (£) <span style={{ fontWeight:400, color:'#999' }}>— leave empty for every order</span></label>
+          <input
+            value={settings.takeaway_discount_min_total || ''}
+            onChange={e => setSettings({ ...settings, takeaway_discount_min_total: e.target.value })}
+            type="text" inputMode="decimal" step="1" min="0"
+            placeholder="e.g. 30"
+            style={{ width:120, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}
+          />
+        </div>
         <div style={{ fontSize:12, color:'#aaa', marginTop:10 }}>
-          Applies to online takeaway &amp; delivery orders only — never to dine-in bills. Capped at 50%.
+          Applies to online takeaway &amp; delivery orders only — never to dine-in bills. Capped at 50%. The ordering page advertises the offer automatically and the discount is applied at checkout — including inside the card charge.
+        </div>
+      </div>
+
+      {/* ── SEPOS-TA-CHOICE-001 — Online order payment ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:8 }}>💳 Online Order Payment</h2>
+        <div style={{ fontSize:12, color:'#888', lineHeight:1.5, marginBottom:12 }}>
+          How customers pay on your online ordering page and widget. QR table ordering has its own setting above; vouchers always pay online.
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, maxWidth:640 }}>
+          {[['', '⚙️ Automatic', 'Pay online when card keys are set up, otherwise pay on collection (today\'s behaviour)'],
+            ['collection', '🏪 Pay on collection', 'Never ask for a card online — staff take payment at handover'],
+            ['choice', '🤝 Customer chooses', 'Checkout shows both: pay now online, or pay at the restaurant']].map(([val, label, hint]) => (
+            <button key={val || 'auto'} onClick={() => setSettings({ ...settings, takeaway_pay_mode: val })} style={{
+              padding:'12px', borderRadius:10, textAlign:'left', cursor:'pointer',
+              border:'2px solid ' + (((settings.takeaway_pay_mode ?? '') === val) ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0'),
+              background:((settings.takeaway_pay_mode ?? '') === val) ? 'var(--brand-primary, #1a1a2e)' : 'white',
+              color:((settings.takeaway_pay_mode ?? '') === val) ? 'white' : '#555',
+            }}>
+              <div style={{ fontWeight:800, fontSize:13 }}>{label}</div>
+              <div style={{ fontSize:11, opacity:0.85, marginTop:4 }}>{hint}</div>
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize:12, color:'#aaa', marginTop:10 }}>
+          Unpaid orders can no-show — choosing "pay on collection" or "customer chooses" accepts that risk. The till blocks closing an unpaid order until staff record the payment.
         </div>
       </div>
 

@@ -2,7 +2,8 @@
   "appId": "uk.co.siamepos.app",
   "appName": "SiamEPOS",
   "webDir": "dist",
-  "android": { "allowMixedContent": false },
+  "server": { "androidScheme": "http" },
+  "android": { "allowMixedContent": true },
   "packageClassList": ["PrinterPlugin"],
   "plugins": { "CapacitorHttp": { "enabled": true } }
 }

@@ -66,8 +66,18 @@ const getServerURL = () => {
     try { return (localStorage.getItem('siamepos_tenant_url') || '').replace(/\/+$/, ''); } catch { return ''; }
   }
 
+  // Per-client Netlify deploy: the site declares its restaurant's backend via
+  // the VITE_API_URL build env var. Explicit config BEATS the local-IP
+  // heuristic below — a bundle that names its backend should never have the
+  // guess override it (no shipped artifact combines a baked URL with a
+  // local-IP host: Netlify sites live on public domains, Electron/native
+  // return above, and LAN tablets load the desktop dist, built without one).
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
   const host = window.location.hostname;
-  // If running on localhost or local IP (192.168.x.x or 10.x.x.x)
+  // If running on localhost or local IP (192.168.x.x or 10.x.x.x): assume
+  // this is a LAN tablet browsing to the host till — its backend is :3001.
   if (
     host === 'localhost' ||
     host === '127.0.0.1' ||
@@ -76,11 +86,6 @@ const getServerURL = () => {
     host.startsWith('172.')
   ) {
     return `http://${host}:3001`;
-  }
-  // Per-client Netlify deploy: the site declares its restaurant's backend via
-  // the VITE_API_URL build env var.
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
   }
   // No VITE_API_URL on a public host. Only the shared MAIN site may use the main
   // cloud without one; ANY other public host here is a per-tenant site built
@@ -102,15 +107,21 @@ export const TENANT_MISCONFIGURED = tenantMisconfigured;
 // PIN sessions live under 'siamepos_token' (NOT 'siamepos_auth', which
 // App.jsx auto-restores on load — PIN users must still log in per shift).
 export const authHeaders = () => {
+  const h = {};
+  try {
+    // SEPOS-DEVICE-AUTH-001 — this browser's device authorisation, if any.
+    const dev = localStorage.getItem('siamepos_device_token');
+    if (dev) h['x-device-token'] = dev;
+  } catch {}
   try {
     const raw = localStorage.getItem('siamepos_token') || localStorage.getItem('siamepos_auth');
-    if (!raw) return {};
+    if (!raw) return h;
     const a = JSON.parse(raw);
     if (a?.token && (!a.expires_at || a.expires_at > Date.now())) {
-      return { Authorization: `Bearer ${a.token}` };
+      return { ...h, Authorization: `Bearer ${a.token}` };
     }
   } catch {}
-  return {};
+  return h;
 };
 export const storePinSession = (r) => {
   try {
@@ -122,11 +133,28 @@ export const storePinSession = (r) => {
 // first; cache good responses; on a network failure serve the last cached copy
 // so the till keeps working with no internet. On web/desktop cachePut/cacheGet
 // no-op, so behaviour is unchanged.
+// SEPOS-047a-HEAL — a gated endpoint answering "sign out and sign in again"
+// means the stored session has no usable token (e.g. saved by a pre-token
+// build). Alerting forever helps nobody: clear BOTH session keys and reload,
+// so the app lands on the login screen and the next login stores a real
+// token. Matched on our own server's exact message, so a transient error can
+// never log anyone out.
+const healStaleSession = (json) => {
+  try {
+    if (json && typeof json.error === 'string' && json.error.includes('sign out and sign in again')) {
+      localStorage.removeItem('siamepos_auth');
+      localStorage.removeItem('siamepos_token');
+      window.location.reload();
+    }
+  } catch {}
+  return json;
+};
 const get = async (url) => {
   try {
     const json = useNativeHttp()
       ? await nativeRequest('GET', SERVER_URL + url, { headers: authHeaders() })
       : await (await fetch(SERVER_URL + url, { headers: authHeaders() })).json();
+    healStaleSession(json);
     if (json && !json.error) cachePut(url, json);   // fire-and-forget
     return json;
   } catch (e) {
@@ -135,21 +163,21 @@ const get = async (url) => {
     throw e;
   }
 };
-const post = (url, data) => useNativeHttp()
+const post = (url, data) => (useNativeHttp()
   ? nativeRequest('POST', SERVER_URL + url, { headers: { 'Content-Type': 'application/json', ...authHeaders() }, data })
   : fetch(SERVER_URL + url, {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(data)
-    }).then(r => r.json());
-const put = (url, data) => useNativeHttp()
+    }).then(r => r.json())).then(healStaleSession);
+const put = (url, data) => (useNativeHttp()
   ? nativeRequest('PUT', SERVER_URL + url, { headers: { 'Content-Type': 'application/json', ...authHeaders() }, data })
   : fetch(SERVER_URL + url, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(data)
-    }).then(r => r.json());
-const del = (url) => useNativeHttp()
+    }).then(r => r.json())).then(healStaleSession);
+const del = (url) => (useNativeHttp()
   ? nativeRequest('DELETE', SERVER_URL + url, { headers: authHeaders() })
-  : fetch(SERVER_URL + url, { method: 'DELETE', headers: authHeaders() }).then(r => r.json());
+  : fetch(SERVER_URL + url, { method: 'DELETE', headers: authHeaders() }).then(r => r.json())).then(healStaleSession);
 
 // SEPOS-046y — the helpers above resolve (not reject) on HTTP 4xx/5xx, so a
 // try/catch around them only sees network failures. Optimistic-UI handlers
@@ -161,6 +189,9 @@ export const assertOk = (res) => {
 };
 
 export const getTables = () => get('/api/tables');
+// SEPOS-ITEM-MOVE-001 — move one line to another table (server guards: no
+// payments on the source bill, never QR orders, never voided lines).
+export const moveOrderItem = (itemId, target_table_id) => put(`/api/order-items/${itemId}/move`, { target_table_id });
 export const updateTableStatus = (id, status) => put(`/api/tables/${id}`, { status });
 // SEPOS-ANDROID-002 — when online, warm EVERY item's modifiers into the cache
 // (once) so offline taps still show modifier choices. Background, best-effort.
@@ -344,26 +375,29 @@ export const addOrderItems = async (orderId, items, sentBy = null) => {
 // SEPOS-062 — `tenders` (optional) is an array of {amount, method} for split
 // bills, so each tender is recorded as its own payment row with its real method
 // (Cash/Card) instead of one lumped 'Split' row. Single payments omit it.
-const localPay = async (lid, amount, method, tenders) => {
+const localPay = async (lid, amount, method, tenders, tip) => {
   const doc = await localOrderGet(lid);
   if (!doc) return { error: 'Order not found' };
   doc.status = 'closed';
   doc.payment_method = method;
   doc.amount_paid = amount;
+  if (Number(tip) > 0) doc.tip = Number(tip);            // SEPOS-TIPS-001
   if (tenders && tenders.length) doc.tenders = tenders;
   doc.closed_at = new Date().toISOString();
   await localOrderUpdate(lid, doc);
   return { success: true };
 };
-export const payOrder = async (orderId, amount, method, tenders) => {
+// SEPOS-TIPS-001 — `tip` (optional, £) is the gratuity inside the tender
+// amounts (card over-tender + explicit tip box); stored on the payment row.
+export const payOrder = async (orderId, amount, method, tenders, tip) => {
   const lid = await localTarget(orderId);
-  if (lid) return localPay(lid, amount, method, tenders);
-  try { return await post(`/api/orders/${orderId}/pay`, tenders && tenders.length ? { payments: tenders } : { amount, method }); }
+  if (lid) return localPay(lid, amount, method, tenders, tip);
+  try { return await post(`/api/orders/${orderId}/pay`, tenders && tenders.length ? { payments: tenders, tip } : { amount, method, tip }); }
   catch (e) {
     if (!isNative()) throw e;
     const pid = await promoteOrder(orderId);
     if (!pid) throw e;
-    return localPay(pid, amount, method, tenders);
+    return localPay(pid, amount, method, tenders, tip);
   }
 };
 
@@ -453,6 +487,10 @@ async function hashPin(pin) {
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
   } catch { return 'p:' + pin; }
 }
+// SEPOS-DEVICE-AUTH-001 — authorise this browser for a gated cloud till.
+export const requestDeviceAuth = (email) => post('/api/device/request-auth', { email });
+export const consumeDeviceAuth = (token) => post('/api/device/consume-auth', { token });
+
 export const loginStaff = async (pin) => {
   try {
     const json = useNativeHttp()
@@ -473,6 +511,9 @@ export const loginStaff = async (pin) => {
 export const changeStaffPin = (new_pin) => post('/api/staff/change-pin', { new_pin });
 // SEPOS-LITE-003 — email + password login (Lite restaurant owners).
 export const emailLogin = (email, password) => post('/api/auth/email-login', { email, password });
+// SEPOS-OFFICE-001 — owner Back Office magic link (request + one-time consume).
+export const requestLoginLink = (email) => post('/api/auth/request-login-link', { email });
+export const consumeLoginLink = (token) => post('/api/auth/consume-login-link', { token });
 export const getDailyReport = (date) => get(`/api/reports/daily${date ? `?date=${date}` : ''}`);
 export const getItemModifiers = async (itemId) => {
   if (!isNative()) return get(`/api/menu/items/${itemId}/modifiers`);   // web/desktop: unchanged
@@ -482,6 +523,11 @@ export const getItemModifiers = async (itemId) => {
 export const addModifierGroup = (itemId, group) => post(`/api/menu/items/${itemId}/modifiers`, group);
 // SEPOS-ALLERGEN-OPT-001 — one-tap create of the global dietary/allergen group (idempotent server-side).
 export const createDietaryPreset = () => post('/api/menu/dietary-preset', {});
+// SEPOS-ALLERGEN-SYNC-001 — manual allergen ticks through the helpers (raw
+// fetch silently fails on native tills — the MenuSection lesson). allergens
+// is the JSON-string form the endpoint stores verbatim.
+export const getDishAllergens  = () => get('/api/dish-allergens');
+export const saveDishAllergens = (menuItemId, allergens) => post(`/api/dish-allergens/${menuItemId}`, { allergens });
 export const addModifierOption = (groupId, option) => post(`/api/modifier-groups/${groupId}/options`, option);
 export const deleteModifierGroup = (groupId) => del(`/api/modifier-groups/${groupId}`);
 export const deleteModifier = (modifierId) => del(`/api/modifiers/${modifierId}`);
@@ -553,6 +599,9 @@ export const getBillAmendments    = (orderId) => get(`/api/bills/${orderId}/amen
 // body: { payments: [{ id, amount, method, remove }], reason, pin }
 export const editBillPayment      = (orderId, body) => put(`/api/bills/${orderId}/edit-payment`, body);
 export const getSettings = () => get('/api/settings');
+// SEPOS-CFD-001 — customer-facing display relay (till pushes, second screen polls)
+export const pushCfdState = (state) => post('/api/cfd/state', state);
+export const getCfdState = (station = 'main') => get(`/api/cfd/state?station=${encodeURIComponent(station)}`);
 export const updateSettings = (settings) => put('/api/settings', settings);
 // SEPOS-060 phase 2 — desktop offline license lock state + manual re-check
 // (used by the lock screen after a client pays so they unlock without waiting).
@@ -575,6 +624,8 @@ export const setPrinterDefault  = (role, printer_id) => post('/api/printers/set-
 export const scanPrinters       = () => get('/api/printers/scan');
 // SEPOS-DRAWER-001 — open the cash drawer (kick via the receipt printer) on payment
 export const serverOpenDrawer   = (printer_name) => post('/api/print/drawer', printer_name ? { printer_name } : {});
+// SEPOS-DRAWER-002 — navbar 💵 no-sale open; bypasses the on-payment toggle, stamped with who pressed it.
+export const manualOpenDrawer   = (staff_name) => post('/api/print/drawer', { manual: true, staff_name: staff_name || null });
 
 // SIAMPAY-QR-001 — dine-in QR pay-by-link.
 export const createQrPay  = (orderId, amount)     => post(`/api/orders/${orderId}/qr-pay`, { amount });
@@ -629,6 +680,8 @@ export const serverPrintReceipt   = (order_id, payment_details, printer_name, pr
 // SEPOS-REPORTS-001 — ESC/POS print for admin reports (Sales / Items /
 // Z / VAT / Bills). Takes a line DSL — see printService.buildReportText.
 export const serverPrintReportText = (lines) => post('/api/print/report-text', { lines });
+// SEPOS-ANDROID-REPORT-BUFFER-001 — native app fetches the SERVER-built report bytes (buildReportText) to push to its LAN printer, matching the main till.
+export const serverReportBuffer = (lines) => post('/api/print/buffers/report', { lines });
 export const serverPrintKitchen   = (order_id, items, course, printer_name, copies)   => post('/api/print/kitchen', { order_id, items, course, printer_name, copies });
 export const serverPrintBar           = (order_id, items, printer_name)         => post('/api/print/bar',          { order_id, items, printer_name });
 export const serverPrintKitchenFull   = (order_id, items, printer_name, copies)         => post('/api/print/kitchen-full', { order_id, items, printer_name, copies });

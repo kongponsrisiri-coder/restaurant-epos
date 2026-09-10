@@ -12,6 +12,7 @@ const orderForTable = (orders, tid) =>
  // SEPOS-TABLE-NAME
 import { roomSize } from '../utils/floorRoom';    // SEPOS-FLOOR-FIT shared room
 import TakeawayStrip    from '../components/TakeawayStrip';
+import ReprintBillsModal from '../components/ReprintBillsModal';
 import BillPeek         from '../components/BillPeek';
 import SyncHealthBanner from '../components/SyncHealthBanner';
 
@@ -36,6 +37,9 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
   const [openOrders, setOpenOrders] = useState([]);
   const [reservations, setReservations] = useState([]);
   const [billPeekOrderId, setBillPeekOrderId] = useState(null);
+  // SEPOS-REPRINT-TABLE-001 — today's-bills reprint modal, opened from the
+  // floating 🖨 button (Korakot: reprint without the trip to Admin → Bills).
+  const [showReprint, setShowReprint] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showCoversPopup, setShowCoversPopup] = useState(null);
   const [coversInput, setCoversInput] = useState('');
@@ -493,6 +497,26 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                       ⏱ {time}
                     </div>
                   )}
+                  {/* SEPOS-DRAFT-BADGE — this DEVICE holds typed-but-unsent items
+                      for this table (kept as a draft by the cart persistence).
+                      The map deliberately shows 0-item orders as available, so
+                      without this a draft was invisible until the table was
+                      reopened (Korakot 19 Aug, "Table 2 shows nothing but has an
+                      item"). Device-local by nature — other tills don't see it. */}
+                  {(() => {
+                    try { return !!localStorage.getItem(`sepos_draft_table_${table.id}`); } catch { return false; }
+                  })() && (
+                    <div title="Unsent items typed on this device — open the table to send or clear them" style={{
+                      position: 'absolute', top: -8, right: -8,
+                      background: '#fff', border: '2px solid #f59e0b',
+                      borderRadius: '50%', width: 24, height: 24,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 12, boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+                      pointerEvents: 'none',
+                    }}>
+                      ✏️
+                    </div>
+                  )}
                   {/* SEPOS-044 — reservation pre-claim badge */}
                   {upcoming && (
                     <div title={`${upcoming.customer_name} · ${upcoming.covers} covers · ${upcoming._time}`} style={{
@@ -552,16 +576,20 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           ════════════════════════════════════════ */}
       {viewMode === 'grid' && (
         <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? 14 : 24, background: '#F4F1EA' }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile
-              ? 'repeat(2, 1fr)'
-              : 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: 16
-          }}>
-            {tables
-              .sort((a, b) => String(a.table_number).localeCompare(String(b.table_number), undefined, { numeric: true }))
-              .map(table => {
+          {(() => {
+            // Korakot 2026-08-23 (Baanrai install): dine-in tables and takeaway
+            // slots interleaved by number in ONE grid — unreadable once a venue
+            // runs many takeaway slots. Split into two labelled sections.
+            const sorted = [...tables].sort((a, b) => String(a.table_number).localeCompare(String(b.table_number), undefined, { numeric: true }));
+            const dineIn = sorted.filter(t => !t.is_takeaway);
+            const takeaways = sorted.filter(t => t.is_takeaway);
+            const gridStyle = {
+              display: 'grid',
+              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(200px, 1fr))',
+              gap: 16,
+            };
+            const sectionHead = { fontSize: 13, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: '#8A8272', margin: '4px 2px 12px' };
+            const gridCard = (table) => {
                 const colours = getTableColour(table);
                 const order = orderForTable(openOrders, table.id);
                 const time = getTableTime(table.id);
@@ -634,8 +662,20 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                     )}
                   </div>
                 );
-              })}
-          </div>
+              };
+            return (
+              <>
+                {takeaways.length > 0 && <div style={sectionHead}>🍽️ Tables</div>}
+                <div style={gridStyle}>{dineIn.map(gridCard)}</div>
+                {takeaways.length > 0 && (
+                  <>
+                    <div style={{ ...sectionHead, marginTop: 26 }}>🥡 Takeaway</div>
+                    <div style={gridStyle}>{takeaways.map(gridCard)}</div>
+                  </>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
@@ -809,6 +849,19 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           </div>
         </div>
       ), document.body)}
+
+      {/* SEPOS-REPRINT-TABLE-001 — floating re-print button, bottom-left
+          (mirrors the zoom stack bottom-right); shows on every view of the
+          table screen. */}
+      <button title="Re-print a bill" onClick={() => setShowReprint(true)} style={{
+        position: 'fixed', left: 14, bottom: 14, zIndex: 5,
+        height: 44, borderRadius: 10, padding: '0 14px',
+        border: '1px solid #d6d3cb', background: 'rgba(255,255,255,0.95)',
+        color: 'var(--brand-primary, #1a1a2e)', fontSize: 14, fontWeight: 800,
+        cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>🖨 <span>Bills</span></button>
+      {showReprint && <ReprintBillsModal onClose={() => setShowReprint(false)} />}
 
       {/* SEPOS-044 — BillPeek modal (shared by takeaway strip + tap menu). */}
       {billPeekOrderId && (

@@ -1,6 +1,5 @@
 import { useState, useEffect, Fragment } from 'react';
-import { SERVER_URL } from '../../api';
-import { getAllMenu as getMenu } from '../../api';
+import { getAllMenu as getMenu, getDishAllergens, saveDishAllergens, assertOk } from '../../api';
 import { invAPI } from './shared';
 import { downloadCsv } from '../../utils/csv';
 import { confirm } from '../../utils/confirm';
@@ -49,7 +48,7 @@ export default function AllergenSection() {
       getMenu(),
       invAPI.getRecipes(),
       invAPI.getIngredients(),
-      fetch(`${SERVER_URL}/api/dish-allergens`).then(r => r.ok ? r.json() : []).catch(() => []),
+      getDishAllergens().then(d => (Array.isArray(d) ? d : [])).catch(() => []),
     ]).then(([m, r, i, d]) => {
       setMenu(Array.isArray(m) ? m : []);
       setRecipes(Array.isArray(r) ? r : []);
@@ -70,7 +69,10 @@ export default function AllergenSection() {
   allCategories.forEach(cat => { (cat.items || []).forEach(item => { menuItemMap[item.id] = item; }); });
 
   // ── Allergen source priority: recipe > manual > ai-scanned > none ──
-  const getDishAllergens = (menuItemId) => {
+  // SEPOS-ALLERGEN-SHADOW-001 — this local helper used to be NAMED getDishAllergens,
+  // shadowing the api import above: the loader effect then called the LOCAL fn,
+  // got a plain object, and `.then` crashed the whole screen on every surface.
+  const allergensFor = (menuItemId) => {
     // 1. Auto from recipe lines → ingredients
     const recipe = recipes.find(r => r.menu_item_id === menuItemId);
     if (recipe && recipe.lines && recipe.lines.length > 0) {
@@ -108,7 +110,7 @@ export default function AllergenSection() {
     if (recipe && recipe.lines && recipe.lines.length > 0) return; // locked by recipe
 
     // Start from current allergens (manual or scanned), then toggle
-    const { allergens: currentSet } = getDishAllergens(menuItemId);
+    const { allergens: currentSet } = allergensFor(menuItemId);
     const current = new Set(currentSet);
     if (current.has(allergenName)) current.delete(allergenName);
     else current.add(allergenName);
@@ -121,11 +123,10 @@ export default function AllergenSection() {
     setManualMap(prev => ({ ...prev, [menuItemId]: current }));
     setSaving(prev => ({ ...prev, [menuItemId]: true }));
     try {
-      const res = await fetch(`${SERVER_URL}/api/dish-allergens/${menuItemId}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ allergens: JSON.stringify([...current]) }),
-      });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      // SEPOS-ALLERGEN-SYNC-001 — through the api helper (raw fetch is a
+      // silent no-op on native tills) + assertOk so a server {error} rolls
+      // the tick back like a network failure does.
+      assertOk(await saveDishAllergens(menuItemId, JSON.stringify([...current])));
     } catch (e) {
       console.error('Allergen save failed', e);
       alert('Allergen change did NOT save — check connection and try again.');
@@ -144,7 +145,7 @@ export default function AllergenSection() {
     const toSync = [];
     allCategories.forEach(cat => {
       (cat.items || []).forEach(item => {
-        const { source } = getDishAllergens(item.id);
+        const { source } = allergensFor(item.id);
         // Only sync items that have scanned data but no manual/recipe yet
         if (source === 'scanned') {
           const scanned = parseAllergens(item.allergens);
@@ -157,17 +158,17 @@ export default function AllergenSection() {
 
     setSyncing(true);
     try {
+      // SEPOS-ALLERGEN-SYNC-001 — through the api helper; helpers resolve
+      // {error} on HTTP failure, so "ok" means no error key in the body.
       const results = await Promise.all(toSync.map(({ id, allergens }) =>
-        fetch(`${SERVER_URL}/api/dish-allergens/${id}`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ allergens: JSON.stringify([...allergens]) }),
-        })
+        saveDishAllergens(id, JSON.stringify([...allergens]))
+          .then(r => !r?.error).catch(() => false)
       ));
-      const failed = results.filter(r => !r.ok).length;
+      const failed = results.filter(ok => !ok).length;
       if (failed > 0) alert(`${failed} of ${toSync.length} items failed to save — re-run Confirm AI Allergens to retry.`);
       // Update local manualMap for the ones that saved
       const newMap = { ...manualMap };
-      toSync.forEach(({ id, allergens }, i) => { if (results[i].ok) newMap[id] = allergens; });
+      toSync.forEach(({ id, allergens }, i) => { if (results[i]) newMap[id] = allergens; });
       setManualMap(newMap);
     } catch (e) {
       console.error('Sync failed', e);
@@ -182,7 +183,7 @@ export default function AllergenSection() {
     const rows = [headers];
     allCategories.forEach(cat => {
       (cat.items || []).forEach(item => {
-        const { allergens: set, source } = getDishAllergens(item.id);
+        const { allergens: set, source } = allergensFor(item.id);
         const row = [cat.name, item.name];
         UK14.forEach(a => row.push(set.has(a.name) ? 'Y' : ''));
         row.push(source);
@@ -194,9 +195,9 @@ export default function AllergenSection() {
 
   // ── Stats ──────────────────────────────────────────────────────
   const totalDishes  = allCategories.reduce((s, c) => s + (c.items || []).length, 0);
-  const withRecipe   = allCategories.reduce((s, c) => s + (c.items || []).filter(i => getDishAllergens(i.id).source === 'recipe').length, 0);
-  const withManual   = allCategories.reduce((s, c) => s + (c.items || []).filter(i => getDishAllergens(i.id).source === 'manual').length, 0);
-  const withScanned  = allCategories.reduce((s, c) => s + (c.items || []).filter(i => getDishAllergens(i.id).source === 'scanned').length, 0);
+  const withRecipe   = allCategories.reduce((s, c) => s + (c.items || []).filter(i => allergensFor(i.id).source === 'recipe').length, 0);
+  const withManual   = allCategories.reduce((s, c) => s + (c.items || []).filter(i => allergensFor(i.id).source === 'manual').length, 0);
+  const withScanned  = allCategories.reduce((s, c) => s + (c.items || []).filter(i => allergensFor(i.id).source === 'scanned').length, 0);
   const notSet       = totalDishes - withRecipe - withManual - withScanned;
 
   return (
@@ -313,7 +314,7 @@ export default function AllergenSection() {
                       </td>
                     </tr>
                     {items.map((item, rowIndex) => {
-                      const { allergens: allergenSet, source } = getDishAllergens(item.id);
+                      const { allergens: allergenSet, source } = allergensFor(item.id);
                       const fromRecipe  = source === 'recipe';
                       const fromScanned = source === 'scanned';
                       const isEditable  = !fromRecipe;

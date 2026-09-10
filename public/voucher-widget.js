@@ -204,7 +204,8 @@
     modalEl.querySelector('.vw-close').addEventListener('click', close);
     bindBody();
     bindFooter();
-    if (state.step === 3 && state.pi && state.pi.mode === 'stripe') {
+    if (state.step === 3 && state.pi && state.pi.mode === 'stripe'
+        && state.mountFailedPi !== state.pi.payment_intent_id) {
       mountStripeElements();
     }
   }
@@ -356,8 +357,14 @@
   }
 
   async function onPay() {
+    if (state.submitting) return;
     state.err = '';
-    state.submitting = true; render();
+    state.submitting = true;
+    // Surgical button update ONLY — calling render() here rebuilds the modal
+    // DOM, which destroys the mounted Payment Element (and the card details
+    // the customer just typed) while confirmPayment is about to read it.
+    const payBtn = modalEl.querySelector('#vw-pay');
+    if (payBtn) { payBtn.disabled = true; payBtn.textContent = 'Processing…'; }
     try {
       if (state.pi.mode === 'stripe') {
         if (!stripe || !elements) throw new Error('Payment not ready — please wait a moment');
@@ -395,21 +402,33 @@
   }
 
   async function mountStripeElements() {
-    if (stripe) return; // already mounted
-    if (!window.Stripe) {
-      await loadScript('https://js.stripe.com/v3/');
+    // Rebuild on EVERY entry to the pay step: render() wipes the modal's DOM
+    // (destroying a mounted Payment Element) and each pass through step 2
+    // mints a fresh PI, so a cached `elements` would hold a dead mount and a
+    // stale client_secret. confirmPayment then fails with Stripe's cryptic
+    // "could not retrieve data from the specified Element".
+    try {
+      if (!window.Stripe) {
+        await loadScript('https://js.stripe.com/v3/');
+      }
+      // SIAMPAY-002 — platform mode: the PI lives on the client's connected
+      // account, so Stripe.js must be scoped to it.
+      stripe = state.pi.stripe_account
+        ? window.Stripe(state.pi.publishable_key, { stripeAccount: state.pi.stripe_account })
+        : window.Stripe(state.pi.publishable_key);
+      elements = stripe.elements({
+        clientSecret: state.pi.client_secret,
+        appearance: { theme: 'stripe', variables: { colorPrimary: '#1e3a6e' } },
+      });
+      const el = elements.create('payment');
+      el.mount('#vw-stripe-payment-element');
+    } catch (e) {
+      stripe = null; elements = null;
+      // remember which PI failed so render() doesn't retry-loop on it;
+      // a fresh PI (Back → Continue) clears the block naturally
+      state.mountFailedPi = state.pi && state.pi.payment_intent_id;
+      setErr('The card form failed to load — ' + (e && e.message ? e.message : 'please close and try again'));
     }
-    // SIAMPAY-002 — platform mode: the PI lives on the client's connected
-    // account, so Stripe.js must be scoped to it.
-    stripe = state.pi.stripe_account
-      ? window.Stripe(state.pi.publishable_key, { stripeAccount: state.pi.stripe_account })
-      : window.Stripe(state.pi.publishable_key);
-    elements = stripe.elements({
-      clientSecret: state.pi.client_secret,
-      appearance: { theme: 'stripe', variables: { colorPrimary: '#1e3a6e' } },
-    });
-    const el = elements.create('payment');
-    el.mount('#vw-stripe-payment-element');
   }
 
   function loadScript(src) {

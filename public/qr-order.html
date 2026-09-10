@@ -90,7 +90,7 @@
   const $ = (s) => document.querySelector(s);
   let S = null, MENU = [], cart = [], view = 'menu', activeCat = null;
   let optItem = null, optGroups = null, optSel = {};          // options sheet state
-  let stripePk = null, stripe = null, elements = null, payBusy = false, uidSeq = 1;
+  let stripePk = null, stripe = null, elements = null, payBusy = false, uidSeq = 1; let qrAcct = null;
   // Tenders this phone has paid on this table (survives a refresh, dies with
   // the tab — we never identify the customer, we just remember our own).
   let myPayments = [];
@@ -109,11 +109,14 @@
       const s = await fetch('/api/qr/session/' + token).then((r) => r.json());
       if (s.error) return renderFatal(s.error);
       S = s;
+      // SEPOS-QR-PAYLATER-001 — venue policy: order now, staff take payment.
+      // Reuse the whole no-payment flow; only the words differ (below).
+      if (S.pay_later) S.stripe_ready = false;
       document.documentElement.style.setProperty('--brand', s.brand || '#1E4038');
       const m = await fetch('/api/menu').then((r) => r.json());
-      MENU = (Array.isArray(m) ? m : []).filter((c) => (c.items || []).some((i) => Number(i.is_online ?? 1)));
+      MENU = (Array.isArray(m) ? m : []).filter((c) => (c.items || []).some((i) => Number(i.is_qr ?? i.is_online ?? 1)));
       activeCat = MENU[0] ? MENU[0].id : null;
-      if (s.order && s.order.items && s.order.items.length && (s.order.payment_status === 'paid' || s.order.payment_status === 'mock')) view = 'status';
+      if (s.order && s.order.items && s.order.items.length && (s.order.payment_status === 'paid' || s.order.payment_status === 'mock' || s.order.payment_status === 'unpaid')) view = 'status';
       render();
       setInterval(refreshStatus, 10000);
     } catch (e) { renderFatal('Could not load the menu — please check your connection and rescan the code.'); }
@@ -136,7 +139,7 @@
   function render() {
     if (view === 'status') return renderStatus();
     const cat = MENU.find((c) => c.id === activeCat) || MENU[0];
-    let h = '<header><h1>' + esc(S.restaurant_name) + '</h1><div class="tbl">📍 ' + esc(S.table.label) + ' · order &amp; pay from your seat</div></header>';
+    let h = '<header><h1>' + esc(S.restaurant_name) + '</h1><div class="tbl">📍 ' + esc(S.table.label) + (S.pay_later ? ' · order from your seat' : ' · order &amp; pay from your seat') + '</div></header>';
     h += '<div class="cats">' + MENU.map((c) => '<button class="cat' + (cat && c.id === cat.id ? ' on' : '') + '" data-cat="' + c.id + '">' + esc(c.name) + '</button>').join('') + '</div>';
     if (cat) {
       const subs = (cat.subcategories || []);
@@ -144,7 +147,7 @@
       const loose = subs.length ? (cat.items || []).filter((i) => !i.subcategory_id) : [];
       if (loose.length) groups.push({ name: 'More', items: loose });
       for (const g of groups) {
-        const items = g.items.filter((i) => Number(i.is_online ?? 1) && Number(i.is_available ?? 1));
+        const items = g.items.filter((i) => Number(i.is_qr ?? i.is_online ?? 1) && Number(i.is_available ?? 1));
         if (!items.length) continue;
         if (g.name) h += '<div class="sec-title">' + esc(g.name) + '</div>';
         for (const i of items) h += itemCard(i);
@@ -244,14 +247,19 @@
         '<span class="step" style="margin-top:6px"><button data-dec="' + c.uid + '">−</button><span>' + c.quantity + '</span><button data-inc="' + c.uid + '">＋</button></span></div></div>';
     }
     h += '<div class="totrow"><span>Total</span><span>' + fmt(cartTotal()) + '</span></div>';
-    h += '<div class="sp-bar"><span class="sp-name">Siam<b>Pay</b></span><span class="sp-sub">🔒 Secure checkout · powered by <b>Stripe</b></span></div>';
+    // SIAMPAY-BRAND-001 (Korakot, 29 Aug) — bar only when a REAL payment
+    // happens here (pay-later/demo have nothing to pay, so a "secure checkout"
+    // badge reads as fake), and the SiamPay wordmark only for actual SiamPay
+    // platform tenants (unhidden by openPayment once the config confirms it —
+    // a venue on its own Stripe keys isn't paying through SiamPay).
+    if (S.stripe_ready) h += '<div class="sp-bar"><span class="sp-name" id="spname" style="display:none">Siam<b>Pay</b></span><span class="sp-sub">🔒 Secure checkout · powered by <b>Stripe</b></span></div>';
     h += '<div id="payel"></div>';
     // Real-card mode: the Stripe element mounts ASYNC (config → js.stripe.com →
     // payment-intent → mount). Until its 'ready' fires the button stays disabled,
     // or a fast first tap confirms an empty form ("card number is incomplete"
     // with no card form on screen — found in the P2 E2E test).
-    h += '<button class="paybtn" id="paybtn"' + (S.stripe_ready ? ' disabled' : '') + '>' + (S.stripe_ready ? 'Loading secure payment…' : 'Send to kitchen (demo — no payment)') + '</button>';
-    h += '<div class="muted">' + (S.stripe_ready ? 'Paid securely by card · Apple Pay · Google Pay' : 'Demo mode — payment is simulated') + '</div>';
+    h += '<button class="paybtn" id="paybtn"' + (S.stripe_ready ? ' disabled' : '') + '>' + (S.stripe_ready ? 'Loading secure payment…' : (S.pay_later ? 'Send order — pay at the till' : 'Send to kitchen (demo — no payment)')) + '</button>';
+    h += '<div class="muted">' + (S.stripe_ready ? 'Paid securely by card · Apple Pay · Google Pay' : (S.pay_later ? 'Order now — a member of staff takes payment at the end.' : 'Demo mode — payment is simulated')) + '</div>';
     h += '<button class="morebtn" id="closecart">← Back to menu</button>';
     h += '</div></div>';
     return h;
@@ -321,14 +329,16 @@
   async function openPayment() {
     if (!S.stripe_ready || !cart.length) return;
     try {
-      let acct = null;
       if (!stripePk) {
         const cfg = await fetch('/api/takeaway/stripe-config').then((r) => r.json());
         stripePk = cfg.publishable_key || cfg.publishableKey;
-        acct = cfg.stripe_account || null;
+        qrAcct = cfg.stripe_account || null;
         if (!window.Stripe) await new Promise((ok, bad) => { const s = document.createElement('script'); s.src = 'https://js.stripe.com/v3/'; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
-        stripe = acct ? window.Stripe(stripePk, { stripeAccount: acct }) : window.Stripe(stripePk);
+        stripe = qrAcct ? window.Stripe(stripePk, { stripeAccount: qrAcct }) : window.Stripe(stripePk);
       }
+      // SIAMPAY-BRAND-001 — wordmark for platform tenants only; re-applied on
+      // every cart re-render (the bar is rebuilt hidden each time).
+      if (qrAcct) { const n = document.getElementById('spname'); if (n) n.style.display = ''; }
       const pi = await fetch('/api/qr/payment-intent/' + token, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: cart.map((c) => ({ menu_item_id: c.menu_item_id, quantity: c.quantity, modifiers: c.modifiers })) }) }).then((r) => r.json());
       if (pi.error) { $('#payel').innerHTML = '<div class="err">' + esc(pi.error) + '</div>'; return; }
       window.__qr_pi = pi;

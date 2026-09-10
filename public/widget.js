@@ -27,6 +27,9 @@
   const RESTAURANT_ID  = script?.getAttribute('data-restaurant') || 'siamepos';
   const BUTTON_TEXT    = script?.getAttribute('data-button-text') || 'Book a Table';
   const OVERRIDE_COLOR = script?.getAttribute('data-color') || null;
+  // SEPOS-BOOK-PAGE-001 — hosted /book page opens the booking flow instantly
+  // (no floating button to hunt for); embeds on client sites are unaffected.
+  const AUTO_OPEN      = script?.getAttribute('data-auto-open') === '1';
 
   // ── State ────────────────────────────────────────────────────
   let settings = null;
@@ -89,10 +92,12 @@
       if (!OVERRIDE_COLOR) ACCENT = settings.brand_colour || '#1a472a';
       injectStyles();
       renderButton();
+      if (AUTO_OPEN) openWidget();
     } catch (err) {
       console.error('[SiamEPOS Widget] Failed to load settings:', err.message);
       injectStyles();
       renderButton();
+      if (AUTO_OPEN) openWidget();
     }
   }
 

@@ -175,6 +175,7 @@ async function initDB() {
     // link row); an allergen group's selections print with ⚠️ emphasis + are free.
     await pool.query(`ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_global INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_allergen INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS modifiers (
@@ -343,6 +344,11 @@ async function initDB() {
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_webhook_fires_event_entity ON webhook_fires(event_type, entity_key)`);
 
+    // SEPOS-LEAD-ALERT-001 — first captured contact per sales chat + the
+    // once-only alert stamp (SMS to Korakot).
+    await pool.query(`ALTER TABLE sales_chats ADD COLUMN IF NOT EXISTS lead_contact TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE sales_chats ADD COLUMN IF NOT EXISTS lead_notified_at TIMESTAMP`).catch(() => {});
+
     // SEPOS-BIRTHDAY-001 — per-customer extras. The CRM itself stays a
     // DERIVED view (reservations + takeaway orders, keyed by contact_key =
     // lower(email) or 'p:'+phone); this side-table holds the bits a customer
@@ -399,12 +405,24 @@ async function initDB() {
     // method) would silently merge two genuine identical tenders, so they are
     // keyed on the cloud id.
     await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS cloud_id INTEGER`);
+    // SEPOS-ITEM-MOVE-001 — audit stamp: which bill a line was moved off.
+    await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS moved_from_order_id INTEGER`);
+    // SEPOS-MENU-CHANNELS-001 — per-channel availability: is_qr NULL means
+    // "same as is_online" (live-linked); explicit 0/1 overrides for the QR
+    // table menu only (alcohol at the table but not on the collection page).
+    await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS is_qr INTEGER`);
     // SEPOS-QR-PAY-REDO — the Stripe PaymentIntent that settled THIS tender. A
     // QR table order is paid round by round, so one order legitimately carries
     // several PIs and orders.payment_intent_id (SEPOS-047b: one PI per takeaway
     // order) cannot dedupe them. The unique index is the race backstop behind
     // the endpoint's own check: one succeeded PI settles exactly one round.
     await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255)`);
+    // SEPOS-TIPS-001 — card tip recorded WITH the tender. The tender's amount
+    // ALWAYS includes the tip (both entry routes normalise to this), so
+    // card-takings reconcile against the PDQ settlement, which settles tips
+    // too; `tip` says how much of that amount was gratuity, for the Z line and
+    // the Employment (Allocation of Tips) Act paper trail.
+    await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS tip DECIMAL(10,2) DEFAULT 0`);
 
     // SEPOS-042: audit log for manager-authorised order deletions.
     // The order itself disappears but this row is the paper trail —
@@ -434,6 +452,16 @@ async function initDB() {
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_clock_events_staff_at ON clock_events(staff_id, event_at)`);
+    // SEPOS-CLOCK-CLOUD-001 — idempotency key for till→cloud clock mirroring.
+    // Own try/catch: a throw here would silently skip every migration below it.
+    // Exact duplicates (same person, same type, same instant) carry no
+    // information, so they are removed first rather than failing the index.
+    try {
+      await pool.query(`DELETE FROM clock_events a USING clock_events b
+                        WHERE a.id > b.id AND a.staff_id = b.staff_id
+                          AND a.event_type = b.event_type AND a.event_at = b.event_at`);
+      await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_clock_events_dedupe ON clock_events(staff_id, event_type, event_at)`);
+    } catch (err) { console.warn('[clock] dedupe index not created:', err.message); }
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS settings (
@@ -460,6 +488,20 @@ async function initDB() {
         id SERIAL PRIMARY KEY,
         reason VARCHAR(255) NOT NULL,
         is_active INTEGER DEFAULT 1
+      )
+    `);
+
+    // SEPOS-ALLERGEN-SYNC-001 — manual allergen ticks (Allergen Menu sheet).
+    // This table existed ONLY in SQLite since SEPOS-ALLERGEN-LOCAL-001: every
+    // cloud save 500'd with "relation does not exist" and till-side edits
+    // queued cloud replications that could never land. UNIQUE(menu_item_id)
+    // is required for the upsert's ON CONFLICT.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS dish_allergens (
+        id SERIAL PRIMARY KEY,
+        menu_item_id INTEGER UNIQUE,
+        allergens TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -572,6 +614,44 @@ async function initDB() {
       )
     `);
 
+    // SEPOS-OFFICE-001 — one-time sign-in links for the owner Back Office.
+    // Only the SHA-256 of the token is stored; consume is an atomic
+    // UPDATE … RETURNING so a link can never be used twice.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS login_links (
+        id SERIAL PRIMARY KEY,
+        token_hash TEXT UNIQUE NOT NULL,
+        staff_id INTEGER NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // SEPOS-DEVICE-AUTH-001 — email-authorised browser devices for public
+    // till URLs. device_links = pending 15-min email links; trusted_devices =
+    // long-lived device tokens (sha256 only, like login_links).
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS device_links (
+        id SERIAL PRIMARY KEY,
+        token_hash TEXT UNIQUE NOT NULL,
+        email TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS trusted_devices (
+        id SERIAL PRIMARY KEY,
+        token_hash TEXT UNIQUE NOT NULL,
+        email TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        last_seen TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS reservations (
         id SERIAL PRIMARY KEY,
@@ -627,6 +707,11 @@ async function initDB() {
         last_seen     TIMESTAMP DEFAULT NOW()
       )
     `);
+    // SEPOS-SYNC-TELEMETRY-001 — per-till sync-queue depth reported in the
+    // heartbeat so ops flags a stalled push in minutes, not days.
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_depth INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_quarantined INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_oldest_at TIMESTAMP`);
 
     // SEPOS-PRINT-ALERT-001 — held tickets from failed kitchen/bar/station
     // prints (local tills only; cloud rows never created). See printAlertService.
@@ -678,6 +763,11 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS lunch
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS dinner_service_start TIME DEFAULT '17:30'`);
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS dinner_service_end TIME DEFAULT '21:30'`);
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS max_party_size INTEGER DEFAULT 8`);
+// SEPOS-HOURS-PERDAY-001 — real per-day service hours for ONLINE ORDERING
+// (takeaway page/widget + QR). JSON: {"mon":[],"tue":[["12:00","15:00"],
+// ["17:00","22:00"]],...} — [] or a missing day = closed that day. When set it
+// supersedes service_type windows for ordering; bookings keep their model.
+await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS weekly_hours TEXT`);
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS restaurant_phone VARCHAR(30)`);
 // SEPOS-048 — per-restaurant timezone so cloud validators don't depend on Railway's
 // process TZ (defaults to Europe/London since current customers are UK).
@@ -952,6 +1042,11 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_stock_movements_ingredient ON stock_movements(ingredient_id)`);
+    // Tables that predate SEPOS-032 lack order_item_id (CREATE IF NOT EXISTS
+    // skips them, and no ALTER existed) — indexing it aborted the whole initDB
+    // on the ORIGINAL cloud DB every boot, silently skipping every migration
+    // below this line. SQLite has had the addColumnIfMissing guard all along.
+    await pool.query(`ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS order_item_id INTEGER`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_stock_movements_order_item ON stock_movements(order_item_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_stock_movements_created    ON stock_movements(created_at DESC)`);
 

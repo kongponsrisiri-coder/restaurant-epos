@@ -12,8 +12,26 @@ import { CapacitorHttp } from '@capacitor/core';
 
 const NAVY = 'var(--brand-primary,#0D1B3E)', GOLD = 'var(--brand-accent,#C9A84C)';
 
-export default function SetupScreen({ onConfigured }) {
-  const [url, setUrl] = useState('');
+// SEPOS-ANDROID-IP-001 (Korakot, 9 Sep) — a tablet joining a LAN host till is
+// pointed at an IP, not a domain, and this screen used to prepend https:// to
+// anything without a scheme. So typing "192.168.1.50" became
+// "https://192.168.1.50" and failed, forcing staff to type the whole
+// "http://192.168.1.50:3001" on a tablet keyboard. Now a bare IP (or
+// localhost) is understood as a host till on the local network: plain http,
+// and :3001 — the port the host server listens on — added when no port is
+// given. Anything that looks like a domain still gets https, as before.
+export function normaliseAddress(raw) {
+  const u = String(raw || '').trim().replace(/\/+$/, '');
+  if (!u) return '';
+  if (/^https?:\/\//i.test(u)) return u;                       // already explicit — respect it
+  const bareIp     = /^(\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(u);
+  const isLocalhost = /^localhost(:\d+)?$/i.test(u);
+  if (bareIp || isLocalhost) return u.includes(':') ? `http://${u}` : `http://${u}:3001`;
+  return 'https://' + u;                                       // a domain — cloud tenants are https
+}
+
+export default function SetupScreen({ onConfigured, reconnect = false, currentUrl = '' }) {
+  const [url, setUrl] = useState(reconnect ? (currentUrl || '') : '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -85,9 +103,8 @@ export default function SetupScreen({ onConfigured }) {
     // button is now onClick={() => connect()}; this guard is belt-and-braces
     // so only a real string override (the QR-scan path) is honoured.
     const raw = (typeof override === 'string' && override) ? override : url;
-    let u = String(raw).trim().replace(/\/+$/, '');
+    const u = normaliseAddress(raw);
     if (!u) { setError('Enter your SiamEPOS address.'); return; }
-    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
     setBusy(true); setError('');
 
     const isNative = (() => {
@@ -157,16 +174,30 @@ export default function SetupScreen({ onConfigured }) {
         <span style={{ color: '#fff' }}>Siam</span><span style={{ color: GOLD }}>EPOS</span>
       </div>
       <div style={{ color: 'rgba(201,168,76,0.8)', fontSize: 12, letterSpacing: '0.22em',
-        textTransform: 'uppercase', marginTop: 6, marginBottom: 28 }}>Set up this device</div>
+        textTransform: 'uppercase', marginTop: 6, marginBottom: reconnect ? 16 : 28 }}>
+        {reconnect ? "Can't reach the till" : 'Set up this device'}
+      </div>
+
+      {/* SEPOS-ANDROID-RECONNECT-001 — the router handed the host a new address.
+          Say so plainly and put the scanner in reach, instead of a dead app. */}
+      {reconnect && (
+        <div style={{ width: '100%', maxWidth: 380, background: 'rgba(239,68,68,0.12)',
+          border: '1px solid rgba(239,68,68,0.45)', borderRadius: 10, padding: '12px 14px',
+          marginBottom: 20, color: '#fecaca', fontSize: 13, lineHeight: 1.5 }}>
+          This device can't reach <b style={{ color: '#fff' }}>{currentUrl || 'the till'}</b>.
+          <br />The till's address usually changes when the router restarts.
+          <br /><br />Scan the QR on the till's screen, or type its new address below.
+        </div>
+      )}
 
       <div style={{ width: '100%', maxWidth: 380 }}>
         <label style={{ color: '#cbd5e1', fontSize: 13, display: 'block', marginBottom: 8 }}>
-          Your SiamEPOS address (from your setup email)
+          {reconnect ? "The till's address" : 'Your SiamEPOS address (from your setup email)'}
         </label>
         <input
           type="url" inputMode="url" autoCapitalize="none" autoCorrect="off" autoFocus
           value={url} onChange={(e) => { setUrl(e.target.value); setError(''); }}
-          placeholder="e.g. baan-siam.siamepos.co.uk"
+          placeholder="192.168.1.50  or  baan-siam.siamepos.co.uk"
           style={{ width: '100%', height: 52, borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)',
             background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 16, padding: '0 16px', outline: 'none' }} />
         {error && (

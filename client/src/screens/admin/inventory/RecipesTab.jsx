@@ -105,7 +105,7 @@ export default function RecipesTab() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
                 <label style={{ fontSize: 13, fontWeight: 600, color: '#555' }}>Recipe makes</label>
-                <input type="number" min="1" value={serves} onChange={e => setServes(Number(e.target.value))} style={{ width: 60, padding: '6px 8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, textAlign: 'center' }} />
+                <input type="text" inputMode="decimal" min="1" value={serves} onChange={e => setServes(Number(e.target.value))} style={{ width: 60, padding: '6px 8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, textAlign: 'center' }} />
                 <span style={{ fontSize: 13, color: '#888' }}>portion(s)</span>
               </div>
             </div>
@@ -129,7 +129,7 @@ export default function RecipesTab() {
                 <select value={newLine.ingredient_id} onChange={e => { const ing = ingredients.find(i => i.id === Number(e.target.value)); setNewLine({ ...newLine, ingredient_id: e.target.value, unit: ing?.unit || 'kg' }); }} style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }}>
                   <option value="">— Select ingredient —</option>{ingredients.map(ing => <option key={ing.id} value={ing.id}>{ing.is_batch ? '🥣 ' : ''}{ing.name_en}</option>)}
                 </select>
-                <input type="number" step="0.001" value={newLine.quantity_used} onChange={e => setNewLine({ ...newLine, quantity_used: e.target.value })} placeholder="Qty" style={{ padding: '7px 8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, textAlign: 'right' }} />
+                <input type="text" inputMode="decimal" step="0.001" value={newLine.quantity_used} onChange={e => setNewLine({ ...newLine, quantity_used: e.target.value })} placeholder="Qty" style={{ padding: '7px 8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, textAlign: 'right' }} />
                 <select value={newLine.unit} onChange={e => setNewLine({ ...newLine, unit: e.target.value })} style={{ padding: '7px 6px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }}>{UNITS.map(u => <option key={u} value={u}>{u}</option>)}</select>
                 <button onClick={addLine} style={{ padding: '7px 10px', borderRadius: 8, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>+ Add</button>
                 <div />

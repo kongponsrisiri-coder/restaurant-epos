@@ -204,7 +204,7 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
               onChange={e => setSettings(s => ({ ...s, [portKey]: e.target.value }))}
               placeholder="9100"
               style={portStyle}
-              type="number"
+              type="text" inputMode="decimal"
             />
           </div>
           <div>
@@ -337,7 +337,7 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
           </p>
           <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
             <input
-              type="number"
+              type="text" inputMode="decimal"
               value={settings.kitchen_thai_codepage || ''}
               onChange={e => setSettings(s => ({ ...s, kitchen_thai_codepage: e.target.value }))}
               placeholder="30 (default)"
@@ -741,7 +741,7 @@ function StationsCard({ cardStyle, bare }) {
             <input value={p.name || ''} onChange={e => patch(p.id, 'name', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveRow(p); }} placeholder="Name" style={{ ...inp, flex: '1 1 120px' }} />
             <input value={p.ip || ''} onChange={e => patch(p.id, 'ip', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveRow(p); }} placeholder="IP (blank = by name)" style={{ ...inp, flex: '1 1 110px' }} />
             <input value={p.port || 9100} onChange={e => patch(p.id, 'port', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveRow(p); }} placeholder="Port" style={{ ...inp, width: 70 }} />
-            <input value={p.copies || 1} onChange={e => patch(p.id, 'copies', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveRow(p); }} type="number" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
+            <input value={p.copies || 1} onChange={e => patch(p.id, 'copies', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveRow(p); }} type="text" inputMode="decimal" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
             <button onClick={() => saveRow(p)} disabled={sState[p.id] === 'saving'} style={{ ...inp, border: 'none',
               background: sState[p.id] === 'ok' ? '#16a34a' : sState[p.id] === 'fail' ? '#dc2626' : dirty[p.id] ? '#C9A84C' : 'var(--brand-primary,#0D1B3E)',
               color: dirty[p.id] && !sState[p.id] ? '#0D1B3E' : '#fff', fontWeight: 700, cursor: 'pointer', minWidth: 84 }}>
@@ -824,7 +824,7 @@ function StationsCard({ cardStyle, bare }) {
           <input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder="New printer name" style={{ ...inp, flex: '1 1 120px' }} />
           <input value={draft.ip} onChange={e => setDraft({ ...draft, ip: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder="IP" style={{ ...inp, flex: '1 1 110px' }} />
           <input value={draft.port} onChange={e => setDraft({ ...draft, port: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder="Port" style={{ ...inp, width: 70 }} />
-          <input value={draft.copies} onChange={e => setDraft({ ...draft, copies: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') add(); }} type="number" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
+          <input value={draft.copies} onChange={e => setDraft({ ...draft, copies: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') add(); }} type="text" inputMode="decimal" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
           <button onClick={add} disabled={busy || !draft.name.trim()} style={{ ...inp, border: 'none', background: draft.name.trim() ? 'var(--brand-accent,#C9A84C)' : '#eee', color: draft.name.trim() ? '#fff' : '#aaa', fontWeight: 800, cursor: draft.name.trim() ? 'pointer' : 'not-allowed' }}>+ Add printer</button>
         </div>
         <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -935,17 +935,35 @@ export default function PrintersSection() {
             </div>
           ))}
         </div>
-        <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Bigger = easier to read on a busy line, but fewer characters fit per row. Applies to kitchen / bar tickets and the customer receipt on every printer (thermal + built-in).</div>
-        {/* SEPOS-TICKET-FONT-002 — visible picker for the rendered-vs-classic
-            ticket FONT (was a hidden settings key only; Fern asked, 13 Aug). */}
+        <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Bigger = easier to read on a busy line, but fewer characters fit per row. These control the printer's BUILT-IN font — used by handheld tills with their own printer, and as the automatic fallback when the smooth font below can't print (e.g. Thai text).</div>
+        {/* SEPOS-TICKET-SIZE-001 — one rendered font, operator picks the SIZE
+            for ORDER tickets only (replaces the Modern/Classic style toggle;
+            Korakot, 16 Aug). Customer bills print at one fixed size by design
+            (SEPOS-RECEIPT-FONT-001 — same rendered font, no size option). The
+            printer's built-in font remains only as an automatic fallback. */}
         <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', marginTop:16, paddingTop:14, borderTop:'1px solid #f0f0f0' }}>
-          <label style={{ fontSize:14, fontWeight:600, color:'#555', minWidth:150 }}>Ticket font style</label>
-          <select value={settings.kitchen_ticket_style || 'rendered'} onChange={e => setSettings({...settings, kitchen_ticket_style: e.target.value})} style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}>
-            <option value="rendered">Modern — clean printed font (recommended)</option>
-            <option value="classic">Classic — the printer's built-in font</option>
+          <label style={{ fontSize:14, fontWeight:600, color:'#555', minWidth:150 }}>Ticket font size</label>
+          <select value={settings.kitchen_ticket_size || 'standard'} onChange={e => setSettings({...settings, kitchen_ticket_size: e.target.value})} style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}>
+            <option value="standard">Standard</option>
+            <option value="large">Large</option>
+            <option value="xl">Extra large</option>
+            <option value="xxl">Huge</option>
           </select>
-          <span style={{ fontSize:12, color:'#aaa' }}>Kitchen &amp; bar tickets only; receipts are unaffected. Thai text always uses the classic font.</span>
+          <span style={{ fontSize:12, color:'#aaa' }}>Kitchen &amp; bar order tickets. Bigger sizes fit fewer characters per line before wrapping. Customer bills use the same font at one fixed size.</span>
         </div>
+        {/* SEPOS-FERN-POLISH-001 — printer buzzer on kitchen/bar tickets */}
+        {(() => { const on = settings.kitchen_print_beep === '1'; return (
+          <div onClick={() => setSettings(s => ({ ...s, kitchen_print_beep: on ? '0' : '1' }))}
+            style={{ display:'flex', alignItems:'center', gap:12, marginTop:16, paddingTop:14, borderTop:'1px solid #f0f0f0', cursor:'pointer' }}>
+            <div style={{ width:44, height:26, borderRadius:13, background: on ? 'var(--brand-primary,#0D1B3E)' : '#cbd5e1', position:'relative', transition:'background .15s', flexShrink:0 }}>
+              <div style={{ position:'absolute', top:3, left: on ? 21 : 3, width:20, height:20, borderRadius:'50%', background:'#fff', transition:'left .15s' }} />
+            </div>
+            <div>
+              <div style={{ fontSize:14, fontWeight:700, color:'var(--brand-primary,#0D1B3E)' }}>🔔 Beep when kitchen / bar tickets print</div>
+              <div style={{ fontSize:12, color:'#888', marginTop:2 }}>The printer itself sounds two short beeps as each ticket prints, so the kitchen hears new orders land. Works on POS80-class and Epson thermal printers; printers without a buzzer simply stay silent. Receipts never beep.</div>
+            </div>
+          </div>
+        ); })()}
       </div>
 
       {/* SEPOS-DRAWER-001 — open the cash drawer on payment (default ON). */}

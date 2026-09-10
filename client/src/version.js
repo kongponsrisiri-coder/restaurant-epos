@@ -1,7 +1,3 @@
-// Single source for the app build version, printed on kitchen tickets + receipts
-// so you can tell at a glance which build produced a given printout (removes the
-// "did the update actually land on this till?" guesswork).
-//
-// ⚠️ Bump this in the SAME commit as android/app/build.gradle versionName on
-// every release.
-export const APP_VERSION = '1.5.0';
+// Native (APK/iOS) app version — shown on the login/setup screen so a screenshot
+// tells us which build a device runs. iOS track uses the same file.
+export const APP_VERSION = '1.5.52-ios';

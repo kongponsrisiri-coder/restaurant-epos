@@ -17,7 +17,7 @@
  * surface.
  */
 
-import { serverPrintReportText } from '../api';
+import { serverPrintReportText, serverReportBuffer } from '../api';
 import { isNativeApp, sendRawToPrinter } from '../native/printer';
 import { sunmiAvailable, sunmiPrintOps, printTarget } from '../native/sunmiPrinter';
 import { opsForSunmi, renderOpsToBytes } from '../native/escpos';
@@ -70,7 +70,16 @@ export async function escPosPrint(lines, settings = {}) {
       const sunmiOk = (target === 'builtin' || target === 'auto') ? await sunmiAvailable() : false;
       if (sunmiOk) { await sunmiPrintOps(opsForSunmi(ops)); return { success: true }; }
       if ((target === 'network' || target === 'auto') && ip) {
-        await sendRawToPrinter(ip, settings.printer_receipt_port || 9100, renderOpsToBytes(ops, { thaiCp: settings.kitchen_thai_codepage }));
+        // SEPOS-ANDROID-SERVERPRINT-001 — "like the browser": let the till render
+        // + SEND the report itself (serverPrintReportText). Matches the main till
+        // with the current app, no rebuild. If the server can't reach the printer
+        // (cloud) we PULL the server-built bytes (buildReportText) and push them;
+        // only if BOTH fail do we use the on-device layout.
+        try { const sr = await serverPrintReportText(lines); if (sr && sr.success) return { success: true }; } catch (_) { /* try buffer */ }
+        let base64 = null;
+        try { const r = await serverReportBuffer(lines); if (r && r.data) base64 = r.data; } catch (_) { /* fall back */ }
+        if (!base64) base64 = renderOpsToBytes(ops, { thaiCp: settings.kitchen_thai_codepage });
+        await sendRawToPrinter(ip, settings.printer_receipt_port || 9100, base64);
         return { success: true };
       }
       return { success: false, reason: 'no printer configured' };

@@ -69,3 +69,31 @@ export function clearRole() {
 export function needsTenantSetup() {
   return isNativePlatform() && !isSetUp();
 }
+
+// SEPOS-ANDROID-RECONNECT-001 (Korakot, 9 Sep) — a satellite is pointed at the
+// host till by IP, and that IP is handed out by the restaurant's router. Reboot
+// the router and the host can come back on a different address: every satellite
+// then talks to nothing, with no way back except clearing app data. This probe
+// lets the app SAY so and offer the QR scanner instead of failing silently.
+// Native only — on web/desktop the origin is the server and cannot go stale.
+export async function probeTenant(timeoutMs = 6000) {
+  if (!isNativePlatform()) return true;
+  const base = getTenantUrl();
+  if (!base) return true;                      // not set up yet — setup screen handles it
+  const url = base.replace(/\/+$/, '') + '/api/restaurant';
+  try {
+    const { CapacitorHttp } = await import('@capacitor/core');
+    if (CapacitorHttp?.get) {
+      const res = await CapacitorHttp.get({ url, connectTimeout: timeoutMs, readTimeout: timeoutMs });
+      return !!res && res.status >= 200 && res.status < 500;   // 4xx = reachable but fussy; still "there"
+    }
+  } catch (_) { /* fall through to fetch */ }
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      return res.status >= 200 && res.status < 500;
+    } finally { clearTimeout(t); }
+  } catch (_) { return false; }
+}

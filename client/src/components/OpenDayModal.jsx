@@ -46,7 +46,7 @@ export default function OpenDayModal({ staff, onOpened, onSkip }) {
           padding: '0 14px', marginBottom: err ? 8 : 20 }}>
           <span style={{ fontSize: 20, fontWeight: 700, color: '#888', marginRight: 8 }}>£</span>
           <input
-            type="number" step="0.01" inputMode="decimal" placeholder="0.00"
+            type="text" inputMode="decimal" placeholder="0.00"
             value={float} onChange={(e) => setFloat(e.target.value)}
             autoFocus
             style={{ flex: 1, border: 'none', outline: 'none', fontSize: 24, fontWeight: 700,

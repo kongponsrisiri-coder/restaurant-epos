@@ -1,7 +1,21 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- SEPOS-ANDROID-IP-001 (Korakot, 9 Sep) — a satellite tablet points at the
+         HOST till on the restaurant's own LAN (http://192.168.x.x:3001). Android
+         9+ blocks plain http unless the app opts in, and this app (targetSdk 36)
+         never had the flag — so a satellite could ONLY reach a cloud https URL,
+         and pointing one at the host by IP failed at the network layer before our
+         code saw it. The HOST app has carried this flag all along (it talks to its
+         own 127.0.0.1 server), which is why the gap went unnoticed.
+         Scope note: Android's network-security-config cannot express an IP RANGE
+         (only literal hosts), so private-range-only is not available at build
+         time. The app's own address handling forces https:// for anything that
+         looks like a domain, so cleartext is used solely when an operator
+         deliberately types a LAN IP. -->
     <application
         android:allowBackup="true"
+        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"

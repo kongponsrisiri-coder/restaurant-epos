@@ -13,7 +13,7 @@
 // Nothing is lost either way: a till is a cloud client, so all real data lives
 // on the client's cloud, not on the device.
 
-import { isNativePlatform, clearTenant } from '../native/tenant';
+import { isNativePlatform, clearRole } from '../native/tenant';
 
 function isElectron() {
   return typeof window !== 'undefined' && window.siamepos && window.siamepos.isElectron;
@@ -46,7 +46,15 @@ export async function resetDevice() {
   clearSession();
 
   if (isNativePlatform()) {
-    clearTenant();                 // remove siamepos_tenant_url → needsTenantSetup() = true
+    // SEPOS-RESET-002 (Korakot, 9 Sep, on the Xiaomi Pad) — must be clearRole(),
+    // NOT clearTenant(). clearTenant() removes only siamepos_tenant_url, but
+    // isSetUp() is true if ANY of: setup-done flag, host-mode flag, tenant URL.
+    // So a reset wiped the address and left the setup-done flag behind: the app
+    // still believed it was configured, skipped the Setup screen, and dropped
+    // staff on a login screen pointing at nothing — "Staff list unavailable",
+    // no scanner, no address box, and no way back without clearing app data.
+    // clearRole() removes all three, which is what a reset has to mean.
+    clearRole();                   // setup-done + host-mode + tenant URL → needsTenantSetup() = true
     window.location.reload();      // reboot into the Setup screen
     return;
   }

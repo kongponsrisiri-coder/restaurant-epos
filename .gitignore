@@ -7,7 +7,7 @@ restaurant-local.db-shm
 .env
 
 # Client provisioning secrets — never commit
-scripts/.secrets-*.txt
+scripts/.secrets-*
 
 # Apple Developer ID signing cert + private key — never commit (used for
 # notarization via GitHub Actions secrets, not from the working tree).
@@ -37,11 +37,4 @@ client/android/node-host/
 # Never commit local Claude chat exports (SEC-2026-07)
 Claude Chat history/
 *.chat-export.json
-
-# SEPOS-IOS-HOST-001 — regenerable iOS host binaries (recipe: client/ios/BUILD-IOS-HOST.md)
-client/ios/App/NodeMobile.xcframework/
-client/ios/node-host/NodeMobile.xcframework/
-client/ios/node-host/nodejs-mobile-ios.zip
-client/ios/node-host/include/
-client/ios/node-host/build-sqlite/
-client/ios/App/nodejs-project/node_modules/
+scripts/menu-snapshot-*.json

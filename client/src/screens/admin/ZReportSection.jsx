@@ -10,6 +10,18 @@ import { getZReportPreview, getZReportPreviewBySession, saveZReport, getZReportH
 import { downloadCsv } from '../../utils/csv';
 import { confirm } from '../../utils/confirm';
 
+// SEPOS-TIPS-METHOD-001 (Korakot, 9 Sep) — the Z printed every gratuity as a
+// "Card tip" regardless of how it was actually taken, so a bill amended from
+// card to cash showed £7.25 of card tips against £0.00 of card sales. A card
+// tip sits in the PDQ settlement and is paid out later; a cash tip is notes in
+// the drawer tonight — the owner needs to tell them apart to share tips out.
+function tipsLabel(r) {
+  const by = Array.isArray(r?.tips_by_method) ? r.tips_by_method.filter((t) => Number(t.value) > 0) : [];
+  if (by.length === 0) return 'of which tips';
+  if (by.length === 1) return `of which ${String(by[0].method || '').toLowerCase() === 'cash' ? 'Cash' : by[0].method} tips`;
+  return `of which tips (${by.map((t) => `${t.method} £${Number(t.value).toFixed(2)}`).join(' · ')})`;
+}
+
 export default function ZReportSection() {
   const [step, setStep]           = useState(1);
   const [reportType, setReportType] = useState(null);
@@ -182,6 +194,7 @@ export default function ZReportSection() {
     rows.push(['Cash', Number(reportData.total_cash || 0).toFixed(2)]);
     rows.push(['Card', Number(reportData.total_card || 0).toFixed(2)]);
     rows.push(['Other', Number(reportData.total_other || 0).toFixed(2)]);
+    if (Number(reportData.total_tips || 0) > 0) rows.push([tipsLabel(reportData), Number(reportData.total_tips).toFixed(2)]);
     rows.push(['Food',           Number(reportData.total_food     || 0).toFixed(2)]);
     rows.push(['Drink',          Number(reportData.total_drink    || 0).toFixed(2)]);
     rows.push(['Service charge', Number(reportData.total_service  || 0).toFixed(2)]);
@@ -194,9 +207,18 @@ export default function ZReportSection() {
     rows.push(['Orders', reportData.total_orders || 0]);
     rows.push(['Covers', reportData.total_covers || 0]);
     rows.push(['Avg per cover £', Number(reportData.avg_per_cover || 0).toFixed(2)]);
+    rows.push(['Avg per order £', Number(reportData.avg_per_order || 0).toFixed(2)]);
     rows.push(['Discounts £', Number(reportData.total_discounts || 0).toFixed(2)]);
     if (Number(reportData.comp_bills?.count) > 0) rows.push([`Complimentary bills x${reportData.comp_bills.count} £`, Number(reportData.comp_bills.value || 0).toFixed(2)]);
     rows.push(['Void items', reportData.void_count || 0]);
+    if (Number(reportData.vouchers_sold?.count) > 0 || Number(reportData.vouchers_redeemed?.count) > 0) {
+      rows.push([]);
+      rows.push(['Gift vouchers', 'Amount £']);
+      rows.push([`Sold (${reportData.vouchers_sold?.count || 0})`, Number(reportData.vouchers_sold?.total || 0).toFixed(2)]);
+      if (Number(reportData.vouchers_sold?.till_cash) > 0) rows.push(['  paid cash (drawer)', Number(reportData.vouchers_sold.till_cash).toFixed(2)]);
+      if (Number(reportData.vouchers_sold?.till_card) > 0) rows.push(['  paid card', Number(reportData.vouchers_sold.till_card).toFixed(2)]);
+      rows.push([`Redeemed (${reportData.vouchers_redeemed?.count || 0}) non-cash`, Number(reportData.vouchers_redeemed?.total || 0).toFixed(2)]);
+    }
     if (Array.isArray(reportData.vat_breakdown) && reportData.vat_breakdown.length) {
       rows.push([]);
       rows.push(['VAT breakdown', 'Rate %', 'Net £', 'VAT £']);
@@ -292,7 +314,7 @@ export default function ZReportSection() {
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: 15 }}>£</span>
-                  <input type="number" step="0.01" value={openFloat} onChange={e => setOpenFloat(e.target.value)} placeholder="Float"
+                  <input type="text" inputMode="decimal" step="0.01" value={openFloat} onChange={e => setOpenFloat(e.target.value)} placeholder="Float"
                     style={{ width: 110, padding: '15px 12px 15px 24px', borderRadius: 10, border: 'none', fontSize: 15, boxSizing: 'border-box' }} />
                 </div>
                 <button onClick={handleOpenShift} disabled={shiftBusy}
@@ -385,6 +407,12 @@ export default function ZReportSection() {
               {[{ label: '💵 Cash Sales', value: reportData.total_cash || 0, color: '#22c55e' }, { label: '💳 Card Sales', value: reportData.total_card || 0, color: '#3b82f6' }, { label: '🔄 Other', value: reportData.total_other || 0, color: '#8b5cf6' }].map(p => (
                 <div key={p.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0', fontSize: 15 }}><span>{p.label}</span><span style={{ fontWeight: 700, color: p.color }}>£{Number(p.value).toFixed(2)}</span></div>
               ))}
+              {/* SEPOS-TIPS-001 — gratuities recorded with card tenders. Already
+                  INSIDE Card Sales (the card machine settled them), so this is
+                  an "of which" line, not extra money. */}
+              {Number(reportData.total_tips || 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 10px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 13, color: '#8b5cf6' }}><span>💷 {tipsLabel(reportData)} ({reportData.tips_count})</span><span style={{ fontWeight: 700 }}>£{Number(reportData.total_tips).toFixed(2)}</span></div>
+              )}
               {/* Korakot 2026-06-02: split out Food / Drink / Service
                   charge so the day's £ break-down by kitchen vs bar vs
                   optional service is obvious on the Z Report. */}
@@ -521,13 +549,13 @@ export default function ZReportSection() {
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 20, color: 'var(--brand-primary, #1a1a2e)' }}>💵 Till Reconciliation</div>
             <div style={{ background: '#f0f7ff', borderRadius: 10, padding: 14, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 14, color: '#555' }}>Cash Sales from System</span><span style={{ fontSize: 20, fontWeight: 800, color: '#1e40af' }}>£{Number(reportData.total_cash || 0).toFixed(2)}</span></div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div><label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>🧾 Petty Cash Out</label><div style={{ position: 'relative', marginBottom: 8 }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span><input type="number" step="0.01" value={pettyCash} onChange={e => setPettyCash(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} /></div><input value={pettyCashReason} onChange={e => setPettyCashReason(e.target.value)} placeholder="Reason e.g. Bought supplies..." style={inputStyle} /></div>
-              <div><label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>🏦 Actual Cash Counted</label><div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span><input type="number" step="0.01" value={actualCash} onChange={e => setActualCash(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} /></div></div>
+              <div><label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>🧾 Petty Cash Out</label><div style={{ position: 'relative', marginBottom: 8 }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span><input type="text" inputMode="decimal" step="0.01" value={pettyCash} onChange={e => setPettyCash(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} /></div><input value={pettyCashReason} onChange={e => setPettyCashReason(e.target.value)} placeholder="Reason e.g. Bought supplies..." style={inputStyle} /></div>
+              <div><label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>🏦 Actual Cash Counted</label><div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span><input type="text" inputMode="decimal" step="0.01" value={actualCash} onChange={e => setActualCash(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} /></div></div>
             </div>
             {actualCash !== '' && (
               <div style={{ marginTop: 20, background: '#f8f8f8', borderRadius: 12, padding: 16 }}>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: 'var(--brand-primary, #1a1a2e)' }}>📊 Cash Calculation</div>
-                {[{ label: 'Cash Sales', val: `£${Number(reportData.total_cash || 0).toFixed(2)}` }, pettyNum > 0 && { label: 'Less Petty Cash', val: `-£${pettyNum.toFixed(2)}` }].filter(Boolean).map(r => (
+                {[{ label: 'Cash Sales', val: `£${Number(reportData.total_cash || 0).toFixed(2)}` }, vTillCashR > 0 && { label: '+ Gift vouchers (cash)', val: `£${vTillCashR.toFixed(2)}` }, pettyNum > 0 && { label: 'Less Petty Cash', val: `-£${pettyNum.toFixed(2)}` }].filter(Boolean).map(r => (
                   <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 8, color: '#555' }}><span>{r.label}</span><span>{r.val}</span></div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 700, marginBottom: 8, paddingTop: 8, borderTop: '1px solid #eee' }}><span>Expected Cash</span><span>£{expectedCash.toFixed(2)}</span></div>
@@ -540,12 +568,14 @@ export default function ZReportSection() {
           </div>
           <div style={{ background: 'white', borderRadius: 16, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 20 }}>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 20, color: 'var(--brand-primary, #1a1a2e)' }}>💳 Card Reconciliation</div>
-            <div style={{ background: '#eff6ff', borderRadius: 10, padding: 14, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 14, color: '#555' }}>Card Sales from System</span><span style={{ fontSize: 20, fontWeight: 800, color: '#3b82f6' }}>£{Number(reportData.total_card || 0).toFixed(2)}</span></div>
-            <div><label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>💳 Actual Card Takings <span style={{ fontWeight: 400, color: '#aaa' }}>(from the card machine)</span></label><div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span><input type="number" step="0.01" value={actualCard} onChange={e => setActualCard(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} /></div></div>
+            <div style={{ background: '#eff6ff', borderRadius: 10, padding: 14, marginBottom: 20 }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 14, color: '#555' }}>{vTillCardR > 0 ? 'Card machine should read' : 'Card Sales from System'}</span><span style={{ fontSize: 20, fontWeight: 800, color: '#3b82f6' }}>£{(Number(reportData.total_card || 0) + vTillCardR).toFixed(2)}</span></div>{vTillCardR > 0 && <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>card sales £{Number(reportData.total_card || 0).toFixed(2)} + gift vouchers sold £{vTillCardR.toFixed(2)}</div>}{Number(reportData.total_tips || 0) > 0 && <div style={{ fontSize: 12, color: '#8b5cf6', marginTop: 4 }}>includes £{Number(reportData.total_tips).toFixed(2)} card tips — the card machine total should match as-is</div>}</div>
+            <div><label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>💳 Actual Card Takings <span style={{ fontWeight: 400, color: '#aaa' }}>(from the card machine)</span></label><div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span><input type="text" inputMode="decimal" step="0.01" value={actualCard} onChange={e => setActualCard(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} /></div></div>
             {actualCard !== '' && (
               <div style={{ marginTop: 20, background: '#f8f8f8', borderRadius: 12, padding: 16 }}>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: 'var(--brand-primary, #1a1a2e)' }}>📊 Card Calculation</div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 8, color: '#555' }}><span>Card Sales (system)</span><span>£{Number(reportData.total_card || 0).toFixed(2)}</span></div>
+                {vTillCardR > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 8, color: '#555' }}><span>+ Gift vouchers (card)</span><span>£{vTillCardR.toFixed(2)}</span></div>}
+                {vTillCardR > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 700, marginBottom: 8, paddingTop: 8, borderTop: '1px solid #eee' }}><span>Expected on card machine</span><span>£{(Number(reportData.total_card || 0) + vTillCardR).toFixed(2)}</span></div>}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 700, marginBottom: 8, paddingTop: 8, borderTop: '1px solid #eee' }}><span>Actual Takings</span><span>£{(actualCardR || 0).toFixed(2)}</span></div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 20, fontWeight: 800, paddingTop: 10, borderTop: '2px solid #eee', color: (cardDiffR || 0) === 0 ? '#22c55e' : (cardDiffR || 0) > 0 ? '#3b82f6' : '#ef4444' }}>
                   <span>{(cardDiffR || 0) === 0 ? '✅ Exact!' : (cardDiffR || 0) > 0 ? '📈 Over (system under-recorded)' : '📉 Short'}</span><span>£{Math.abs(cardDiffR || 0).toFixed(2)}</span>
@@ -615,6 +645,7 @@ function buildZReportBody(r, type, settings, cash, thermal) {
     <table>
       <tr><td>💵 Cash</td><td class="right">${fmt(r.total_cash)}</td></tr>
       <tr><td>💳 Card</td><td class="right">${fmt(r.total_card)}</td></tr>
+      ${Number(r.total_tips) > 0 ? `<tr><td style="padding-left:14px">💷 ${tipsLabel(r)}</td><td class="right">${fmt(r.total_tips)}</td></tr>` : ''}
       ${Number(r.total_other) > 0 ? `<tr><td>🔄 Other</td><td class="right">${fmt(r.total_other)}</td></tr>` : ''}
       <tr><td>🍽️ Food</td><td class="right">${fmt(r.total_food)}</td></tr>
       <tr><td>🍺 Drink</td><td class="right">${fmt(r.total_drink)}</td></tr>
@@ -635,6 +666,8 @@ function buildZReportBody(r, type, settings, cash, thermal) {
     <table>
       <tr><td>Orders</td><td class="right">${fmtInt(r.total_orders)}</td></tr>
       <tr><td>Covers</td><td class="right">${fmtInt(r.total_covers)}</td></tr>
+      <tr><td>Avg per order</td><td class="right">${fmt(r.avg_per_order)}</td></tr>
+      <tr><td>Avg per cover</td><td class="right">${fmt(r.avg_per_cover)}</td></tr>
     </table>`;
 
   const vatOnTop = r.vat_mode === 'exclusive';
@@ -645,6 +678,21 @@ function buildZReportBody(r, type, settings, cash, thermal) {
       ${r.vat_breakdown.map(b => `<tr><td>${b.rate}%</td><td class="right">${fmt(b.net)}</td><td class="right">${fmt(b.vat)}</td></tr>`).join('')}
       <tr class="total-row"><td colspan="2">Total VAT</td><td class="right">${fmt(r.vat_total)}</td></tr>
     </table>` : '';
+
+  // SEPOS-FERN-POLISH-001 — gift vouchers on the PRINTED Z (screen had the
+  // block, paper didn't — the drawer held voucher cash the sheet never
+  // explained; Korakot: "that going to confusing the client").
+  const vTillCashZ = Number(r.vouchers_sold?.till_cash || 0);
+  const vTillCardZ = Number(r.vouchers_sold?.till_card || 0);
+  const vActive = Number(r.vouchers_sold?.count) > 0 || Number(r.vouchers_redeemed?.count) > 0;
+  const vouchers = !vActive ? '' : `
+    ${thermal ? '<hr class="divider"/><div class="section-head">Gift Vouchers</div>' : '<h2>Gift Vouchers</h2>'}
+    <table>
+      <tr><td>Sold today (${r.vouchers_sold?.count || 0})</td><td class="right">${fmt(r.vouchers_sold?.total)}</td></tr>
+      ${vTillCashZ > 0 ? `<tr><td>&nbsp;&nbsp;paid cash (in drawer)</td><td class="right">${fmt(vTillCashZ)}</td></tr>` : ''}
+      ${vTillCardZ > 0 ? `<tr><td>&nbsp;&nbsp;paid card</td><td class="right">${fmt(vTillCardZ)}</td></tr>` : ''}
+      <tr><td>Redeemed on bills (${r.vouchers_redeemed?.count || 0}) · non-cash</td><td class="right">${fmt(r.vouchers_redeemed?.total)}</td></tr>
+    </table>`;
 
   // SEPOS-DEPOSIT-001 — booking deposits (only when the tenant uses them).
   const depActive = r.deposits_enabled && (Number(r.deposits_taken?.count) > 0 || Number(r.deposits_redeemed?.count) > 0 || Number(r.deposits_forfeited?.count) > 0 || Number(r.deposits_held?.total) > 0);
@@ -661,8 +709,9 @@ function buildZReportBody(r, type, settings, cash, thermal) {
     ${thermal ? '<hr class="divider-solid"/><div class="section-head">Cash Reconciliation</div>' : '<h2>Cash Reconciliation</h2>'}
     <table>
       <tr><td>Cash sales</td><td class="right">${fmt(r.total_cash)}</td></tr>
+      ${vTillCashZ > 0 ? `<tr><td>+ Voucher sales (cash)</td><td class="right">${fmt(vTillCashZ)}</td></tr>` : ''}
       <tr><td>– Petty cash</td><td class="right">${fmt(cash.pettyCash)}</td></tr>
-      <tr><td>Expected in drawer</td><td class="right">${fmt((r.total_cash || 0) - cash.pettyCash)}</td></tr>
+      <tr><td>Expected in drawer</td><td class="right">${fmt((r.total_cash || 0) + vTillCashZ - cash.pettyCash)}</td></tr>
       <tr><td>Actual counted</td><td class="right">${fmt(cash.actualCash)}</td></tr>
       <tr class="total-row"><td>${cash.difference === 0 ? '✅ Exact match' : cash.difference > 0 ? '📈 Over' : '📉 Short'}</td><td class="right">${fmt(Math.abs(cash.difference))}</td></tr>
     </table>`;
@@ -671,11 +720,12 @@ function buildZReportBody(r, type, settings, cash, thermal) {
     ${thermal ? '<hr class="divider"/><div class="section-head">Card Reconciliation</div>' : '<h2>Card Reconciliation</h2>'}
     <table>
       <tr><td>Card sales (system)</td><td class="right">${fmt(r.total_card)}</td></tr>
+      ${vTillCardZ > 0 ? `<tr><td>+ Voucher sales (card)</td><td class="right">${fmt(vTillCardZ)}</td></tr>` : ''}
       <tr><td>Actual takings</td><td class="right">${fmt(cash.actualCard)}</td></tr>
       <tr class="total-row"><td>${cash.cardDifference === 0 ? '✅ Exact match' : cash.cardDifference > 0 ? '📈 Over' : '📉 Short'}</td><td class="right">${fmt(Math.abs(cash.cardDifference || 0))}</td></tr>
     </table>`;
 
-  return head + summary + channels + stats + vat + deposits + recon + cardRecon;
+  return head + summary + channels + stats + vat + vouchers + deposits + recon + cardRecon;
 }
 
 // ── ESC/POS line builder ──────────────────────────────────────────
@@ -694,6 +744,7 @@ function buildZReportLines(r, type, settings, cash) {
   lines.push({ kind: 'row', left: 'Cash',                    right: fmt(r.total_cash) });
   lines.push({ kind: 'row', left: 'Card',                    right: fmt(r.total_card) });
   if (Number(r.total_other) > 0) lines.push({ kind: 'row', left: 'Other', right: fmt(r.total_other) });
+  if (Number(r.total_tips)  > 0) lines.push({ kind: 'row', left: ' ' + tipsLabel(r), right: fmt(r.total_tips) });
   lines.push({ kind: 'div' });
   lines.push({ kind: 'h2', text: 'SALES' });
   lines.push({ kind: 'row', left: 'Food',                    right: fmt(r.total_food) });
@@ -709,6 +760,9 @@ function buildZReportLines(r, type, settings, cash) {
   lines.push({ kind: 'div' });
   lines.push({ kind: 'row', left: 'Orders',         right: fmtInt(r.total_orders) });
   lines.push({ kind: 'row', left: 'Covers',         right: fmtInt(r.total_covers) });
+  // Korakot 2026-08-23 (Fern's ask): average spend printed with the counts.
+  lines.push({ kind: 'row', left: 'Avg per order',  right: fmt(r.avg_per_order) });
+  lines.push({ kind: 'row', left: 'Avg per cover',  right: fmt(r.avg_per_cover) });
 
   if (Array.isArray(r.vat_breakdown) && r.vat_breakdown.length) {
     lines.push({ kind: 'div' });
@@ -723,6 +777,14 @@ function buildZReportLines(r, type, settings, cash) {
   // SEPOS-DEPOSIT-001 — booking deposits (only when used). Redeemed is a non-cash
   // tender NOT in till cash; taken today is future revenue, not today's sales.
   if (r.deposits_enabled && (Number(r.deposits_taken?.count) > 0 || Number(r.deposits_redeemed?.count) > 0 || Number(r.deposits_forfeited?.count) > 0 || Number(r.deposits_held?.total) > 0)) {
+  if (Number(r.vouchers_sold?.count) > 0 || Number(r.vouchers_redeemed?.count) > 0) {
+    lines.push({ kind: 'div' });
+    lines.push({ kind: 'h2', text: 'GIFT VOUCHERS' });
+    lines.push({ kind: 'row', left: `Sold today (${r.vouchers_sold?.count || 0})`, right: fmt(r.vouchers_sold?.total) });
+    if (Number(r.vouchers_sold?.till_cash) > 0) lines.push({ kind: 'row', left: '  paid cash (drawer)', right: fmt(r.vouchers_sold?.till_cash) });
+    if (Number(r.vouchers_sold?.till_card) > 0) lines.push({ kind: 'row', left: '  paid card', right: fmt(r.vouchers_sold?.till_card) });
+    lines.push({ kind: 'row', left: `Redeemed (${r.vouchers_redeemed?.count || 0}) non-cash`, right: fmt(r.vouchers_redeemed?.total) });
+  }
     lines.push({ kind: 'div' });
     lines.push({ kind: 'h2', text: 'BOOKING DEPOSITS' });
     lines.push({ kind: 'row', left: `Taken today (${r.deposits_taken?.count || 0})`,    right: fmt(r.deposits_taken?.total) });
@@ -734,8 +796,9 @@ function buildZReportLines(r, type, settings, cash) {
   lines.push({ kind: 'div-solid' });
   lines.push({ kind: 'h2', text: 'CASH RECONCILIATION' });
   lines.push({ kind: 'row', left: 'Cash sales',       right: fmt(r.total_cash) });
+  if (Number(r.vouchers_sold?.till_cash) > 0) lines.push({ kind: 'row', left: '+ Voucher cash',   right: fmt(r.vouchers_sold?.till_cash) });
   lines.push({ kind: 'row', left: '- Petty cash',     right: fmt(cash.pettyCash) });
-  lines.push({ kind: 'row', left: 'Expected drawer',  right: fmt((r.total_cash || 0) - cash.pettyCash) });
+  lines.push({ kind: 'row', left: 'Expected drawer',  right: fmt((r.total_cash || 0) + Number(r.vouchers_sold?.till_cash || 0) - cash.pettyCash) });
   lines.push({ kind: 'row', left: 'Actual counted',   right: fmt(cash.actualCash) });
   const label = cash.difference === 0 ? 'Exact match' : cash.difference > 0 ? 'Over by' : 'Short by';
   lines.push({ kind: 'total', left: label, right: fmt(Math.abs(cash.difference)) });
@@ -745,6 +808,7 @@ function buildZReportLines(r, type, settings, cash) {
     lines.push({ kind: 'div' });
     lines.push({ kind: 'h2', text: 'CARD RECONCILIATION' });
     lines.push({ kind: 'row', left: 'Card sales (sys)', right: fmt(r.total_card) });
+    if (Number(r.vouchers_sold?.till_card) > 0) lines.push({ kind: 'row', left: '+ Voucher card',  right: fmt(r.vouchers_sold?.till_card) });
     lines.push({ kind: 'row', left: 'Actual takings',   right: fmt(cash.actualCard) });
     const clabel = cash.cardDifference === 0 ? 'Exact match' : cash.cardDifference > 0 ? 'Over by' : 'Short by';
     lines.push({ kind: 'total', left: clabel, right: fmt(Math.abs(cash.cardDifference || 0)) });

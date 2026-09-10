@@ -12,7 +12,7 @@ const NAVY = 'var(--brand-primary,#0D1B3E)', GOLD = 'var(--brand-accent,#C9A84C)
 export default class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, message: '' };
+    this.state = { hasError: false, message: '', where: '' };
   }
 
   static getDerivedStateFromError(error) {
@@ -22,6 +22,21 @@ export default class ErrorBoundary extends Component {
   componentDidCatch(error, info) {
     // Keep a breadcrumb in the console for support, but never re-throw.
     try { console.error('App render error:', error, info); } catch {}
+    // SEPOS-CRASH-TRACE-001 — a photo of this screen must be enough to debug
+    // (Tori Nori install crash, 18 Aug: message alone gave no component). Show
+    // the top of the component stack, and keep the full detail in localStorage
+    // so support can read it later even after Reload.
+    try {
+      const stack = String(info?.componentStack || '').trim();
+      const top = stack.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 3).join(' ← ');
+      this.setState({ where: top });
+      localStorage.setItem('siamepos_last_crash', JSON.stringify({
+        at: new Date().toISOString(),
+        message: (error && (error.message || String(error))) || '',
+        stack: String(error?.stack || '').slice(0, 2000),
+        componentStack: stack.slice(0, 2000),
+      }));
+    } catch {}
   }
 
   render() {
@@ -51,6 +66,11 @@ export default class ErrorBoundary extends Component {
         {this.state.message && (
           <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 20, maxWidth: 360, wordBreak: 'break-word' }}>
             {this.state.message}
+          </div>
+        )}
+        {this.state.where && (
+          <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 10, marginTop: 6, maxWidth: 420, wordBreak: 'break-word' }}>
+            in {this.state.where}
           </div>
         )}
       </div>

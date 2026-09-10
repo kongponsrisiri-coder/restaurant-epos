@@ -177,9 +177,64 @@ function qrCode(data, { size = 6, ec = 49 } = {}) {
   ]);
 }
 
+// ── Printer buzzer (SEPOS-FERN-POLISH-001) ───────────────────────────────────
+// ESC B n t — beep n times, t×100 ms each. Supported by POS80-class printers
+// (cnfujun clones incl.) and Epson TM variants; firmwares without a buzzer
+// ignore the bytes harmlessly. Gated by settings.kitchen_print_beep ('1'/'0',
+// default OFF) so a venue opts in per install: kitchen staff hear the ticket
+// land without watching the printer. Applied to kitchen/bar tickets + fire
+// notices on the server print path (desktop/LAN); receipts stay silent.
+function beepPrefix(settings) {
+  if (String(settings?.kitchen_print_beep) !== '1') return Buffer.alloc(0);
+  return Buffer.from([ESC, 0x42, 0x02, 0x02]); // 2 beeps × 200 ms
+}
+
 // ── Receipt formatter ─────────────────────────────────────────────────────────
 
-function buildReceipt({ order, items, settings, paymentDetails = {} }) {
+// Optional logo — client-side converts the upload to a monochrome
+// bitmap (1 bit per dot, MSB-first) and stores it in 3 settings:
+//   company_logo_bitmap         — base64 of the raw bytes
+//   company_logo_bitmap_width   — width in BYTES (= dots / 8)
+//   company_logo_bitmap_height  — height in DOTS
+// We wrap the bytes in ESC/POS `GS v 0` (raster image) and emit at
+// the top of the receipt. If any of the three settings is missing
+// or sizes don't match, we skip silently — no error, no blank space.
+// Shared by the classic and rendered receipt paths (SEPOS-RECEIPT-FONT-001).
+function buildLogoBlock(settings) {
+  const logoBlock = [];
+  if (settings.company_logo_bitmap && settings.company_logo_bitmap_width && settings.company_logo_bitmap_height) {
+    try {
+      const data   = Buffer.from(String(settings.company_logo_bitmap), 'base64');
+      const wBytes = parseInt(settings.company_logo_bitmap_width, 10);
+      const hDots  = parseInt(settings.company_logo_bitmap_height, 10);
+      if (data.length === wBytes * hDots) {
+        // Send the whole logo as a single GS v 0 command. ESC/POS spec
+        // allows up to 65535 dots tall via the 2-byte yL/yH field;
+        // cnfujun POS80 happily renders ~300 dots in one go. Chunking
+        // was an earlier defensive measure but produced PARTIAL prints
+        // (some chunks dropped). Single command is more reliable.
+        logoBlock.push(CMD.ALIGN_CENTER);
+        const header = Buffer.from([
+          GS, 0x76, 0x30, 0x00,
+          wBytes & 0xFF, (wBytes >> 8) & 0xFF,
+          hDots  & 0xFF, (hDots  >> 8) & 0xFF,
+        ]);
+        logoBlock.push(header, data, lf());
+      } else {
+        console.warn(`[print] logo bitmap size mismatch — expected ${wBytes * hDots} bytes, got ${data.length} (skipping)`);
+      }
+    } catch (err) {
+      console.warn('[print] logo emit failed (skipping):', err.message);
+    }
+  }
+  return logoBlock;
+}
+
+// SEPOS-RECEIPT-FONT-001 — everything the receipt SAYS (venue strings, dates,
+// money, grouped items) computed ONCE and shared by the classic ESC/POS
+// builder below and the rendered-font raster (ticketRender.receiptLines), so
+// the two paths can never disagree on a number.
+function computeReceiptModel({ order, items, settings, paymentDetails = {} }) {
   // Receipt name — the owner-edited company_name is authoritative: once the
   // key exists, what they typed is what prints, INCLUDING blank (logo-only
   // receipts — Korakot 2026-08-07: blanking the name must not dig up the
@@ -193,11 +248,6 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
   const vatNo   = settings.company_vat     || '';
   const footer  = settings.receipt_footer  || 'Thank you for dining with us!';
   const scRate  = parseFloat(settings.service_charge_rate || 12.5);
-  // SEPOS-PRINT-FONT-001 — receipt body text size. Default 'normal' = today's
-  // output (SIZE_NORMAL, full 42-char columns). Larger scales shrink the
-  // effective column width so the name/price columns still align.
-  const receiptSize  = scaleCmd(settings.receipt_font_scale || 'normal');
-  const receiptWidth = Math.floor(LINE_WIDTH / scaleWidthDivisor(settings.receipt_font_scale || 'normal'));
 
   const now  = new Date();
   const date = now.toLocaleDateString('en-GB',  { day:'2-digit', month:'short', year:'numeric' });
@@ -270,47 +320,33 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
     byCourse[c].push(i);
   });
 
+  return {
+    name, addr, phone, vatNo, footer, scRate, date, time,
+    subtotal, discountAmt, depositPaid, serviceCharge, billTotal,
+    amountPaid, change, tip, method, byCourse,
+    // SEPOS-PAPER-SAVER-001 — the settled RECEIPT (has a payment method) is a
+    // record, not a flyer: skip logo + review QR to save paper. The customer
+    // BILL (no method yet) keeps both.
+    isSettledReceipt: Boolean(method),
+    discountLabel: paymentDetails.discountLabel || '',
+    tenders: Array.isArray(paymentDetails.tenders) ? paymentDetails.tenders : [],
+  };
+}
+
+function buildReceipt({ order, items, settings, paymentDetails = {} }) {
+  const { name, addr, phone, vatNo, footer, scRate, date, time,
+          subtotal, discountAmt, depositPaid, serviceCharge, billTotal,
+          amountPaid, change, tip, method, byCourse, isSettledReceipt }
+    = computeReceiptModel({ order, items, settings, paymentDetails });
+  // SEPOS-PRINT-FONT-001 — receipt body text size. Default 'normal' = today's
+  // output (SIZE_NORMAL, full 42-char columns). Larger scales shrink the
+  // effective column width so the name/price columns still align.
+  const receiptSize  = scaleCmd(settings.receipt_font_scale || 'normal');
+  const receiptWidth = Math.floor(LINE_WIDTH / scaleWidthDivisor(settings.receipt_font_scale || 'normal'));
+
   // Restaurant name: large if short, tall if long
   const nameSize = name.length <= 14 ? [CMD.SIZE_BIG] : [CMD.SIZE_TALL];
-
-  // Optional logo — client-side converts the upload to a monochrome
-  // bitmap (1 bit per dot, MSB-first) and stores it in 3 settings:
-  //   company_logo_bitmap         — base64 of the raw bytes
-  //   company_logo_bitmap_width   — width in BYTES (= dots / 8)
-  //   company_logo_bitmap_height  — height in DOTS
-  // We wrap the bytes in ESC/POS `GS v 0` (raster image) and emit at
-  // the top of the receipt. If any of the three settings is missing
-  // or sizes don't match, we skip silently — no error, no blank space.
-  let logoBlock = [];
-  // SEPOS-PAPER-SAVER-001 — the settled RECEIPT (has a payment method) is a
-  // record, not a flyer: skip logo + review QR to save paper. The customer
-  // BILL (no method yet) keeps both.
-  const isSettledReceipt = Boolean(method);
-  if (!isSettledReceipt && settings.company_logo_bitmap && settings.company_logo_bitmap_width && settings.company_logo_bitmap_height) {
-    try {
-      const data   = Buffer.from(String(settings.company_logo_bitmap), 'base64');
-      const wBytes = parseInt(settings.company_logo_bitmap_width, 10);
-      const hDots  = parseInt(settings.company_logo_bitmap_height, 10);
-      if (data.length === wBytes * hDots) {
-        // Send the whole logo as a single GS v 0 command. ESC/POS spec
-        // allows up to 65535 dots tall via the 2-byte yL/yH field;
-        // cnfujun POS80 happily renders ~300 dots in one go. Chunking
-        // was an earlier defensive measure but produced PARTIAL prints
-        // (some chunks dropped). Single command is more reliable.
-        logoBlock.push(CMD.ALIGN_CENTER);
-        const header = Buffer.from([
-          GS, 0x76, 0x30, 0x00,
-          wBytes & 0xFF, (wBytes >> 8) & 0xFF,
-          hDots  & 0xFF, (hDots  >> 8) & 0xFF,
-        ]);
-        logoBlock.push(header, data, lf());
-      } else {
-        console.warn(`[print] logo bitmap size mismatch — expected ${wBytes * hDots} bytes, got ${data.length} (skipping)`);
-      }
-    } catch (err) {
-      console.warn('[print] logo emit failed (skipping):', err.message);
-    }
-  }
+  const logoBlock = isSettledReceipt ? [] : buildLogoBlock(settings);
 
   const parts = [
     CMD.INIT,
@@ -333,12 +369,12 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
 
     // Order header
     ...(order.order_type === 'takeaway' ? [
-      col2('Type', order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`)), lf(),
+      col2('Type', orderHeading({ ...order, order_type: 'takeaway' })), lf(),   // SEPOS-TA-LABEL-002 — 'TAKEAWAY 2', never the raw slot number
       order.customer_name ? [col2('Customer', order.customer_name), lf()] : [],
       order.pickup_time   ? [col2('Pickup', new Date(order.pickup_time).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/London' })), lf()] : [],
     ] : [
       // Table number BIG + bold + centred so it's obvious at a glance.
-      CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.SIZE_BIG, txt((order.table_label && String(order.table_label).trim()) ? String(order.table_label).trim().toUpperCase() : `TABLE ${order.table_number || '—'}`), CMD.SIZE_NORMAL, CMD.BOLD_OFF, CMD.ALIGN_CENTER, lf(),
+      CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.SIZE_BIG, txt(ticketTableLabel(order)), CMD.SIZE_NORMAL, CMD.BOLD_OFF, CMD.ALIGN_CENTER, lf(),
       col2('Covers', String(order.covers       || '—')), lf(),
     ]),
     col2('Date',    date),  lf(),
@@ -424,8 +460,14 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
     // Footer
     lf(),
     CMD.ALIGN_CENTER,
-    txt(footer),                       lf(),
-    txt('ขอบคุณที่มาใช้บริการ'), lf(3),
+    // SEPOS-FOOTER-SIZE-001 — stays SIZE_TALL here on purpose: SIZE_BIG is
+    // double-WIDTH in ESC/POS (42 cols -> 21), which would truncate every live
+    // footer. This classic path only runs when the rendered receipt fails.
+    // The hardcoded Thai thank-you is gone (Korakot, 8 Sep): it never printed
+    // on the rendered path everyone actually uses, a venue could not remove it,
+    // and it is wrong on a sushi restaurant's paper. The footer setting is now
+    // the only message down here — a venue that wants Thai can type Thai.
+    CMD.BOLD_ON, CMD.SIZE_TALL, txt(footer), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(3),
 
     // SEPOS-REVIEW-QR — Google-review QR on the thermal receipt (was browser-
     // receipt-only, so POS80 network tills never printed it). Prints only when
@@ -451,16 +493,48 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
 // got "TABLE 9" and looked at the wrong side of the room). When the caller
 // passes order.table_label, the heading uses it verbatim; otherwise the
 // numeric fallback is byte-identical to the old behaviour.
+//
+// SEPOS-FIRE-PRINT-001 (27 Aug) — v1.9.39's SEPOS-TA-LABEL-001 pointed every
+// classic-path heading at ticketRender's shared ticketTableLabel() but never
+// imported it into THIS file: the fire notice (classic-only, no rendered
+// path), the kitchen message ticket, and the classic receipt fallback all
+// threw ReferenceError on dine-in calls — the fire card died server-side and
+// desktop tills fell into a stuck browser-print window, fleet-wide as tills
+// restarted onto ≥v1.9.39. Lazy require (ticketRender's load is deliberately
+// guarded at every other call site) with a never-throw fallback that mirrors
+// the shared resolver's semantics exactly.
+function ticketTableLabel(order) {
+  try { return require('./ticketRender').ticketTableLabel(order); }
+  catch {
+    const raw = order && order.table_label && String(order.table_label).trim();
+    const takeawaySlot = order && Number(order.table_is_takeaway ?? 0) === 1;
+    let label = raw ? raw.toUpperCase() : `TABLE ${order && order.table_number != null ? order.table_number : '—'}`;
+    if (takeawaySlot && !/TAKE\s*AWAY/i.test(label)) {
+      label = `TAKEAWAY ${raw ? raw.toUpperCase() : (order && order.table_number != null ? order.table_number : '')}`.trim();
+    }
+    return label;
+  }
+}
 function tableHeading(order) {
-  const label = order && order.table_label && String(order.table_label).trim();
-  if (label) return label.toUpperCase();
-  return `TABLE ${order && order.table_number != null ? order.table_number : '?'}`;
+  return ticketTableLabel(order);
+}
+// SEPOS-TA-LABEL-002 — one heading for a whole ORDER (takeaway label-first,
+// delivery id, dine-in table). Lazy require + never-throw, same pattern as
+// ticketTableLabel above.
+function orderHeading(order) {
+  try { return require('./ticketRender').ticketOrderHeading(order); }
+  catch {
+    if (order && order.order_type === 'takeaway') {
+      if (order.order_subtype === 'delivery') return `DELIVERY #${order.id}`;
+      if (order.table_label || order.table_number != null) return ticketTableLabel({ ...order, table_is_takeaway: 1 });
+      return `TAKEAWAY #${order.id}`;
+    }
+    return ticketTableLabel(order);
+  }
 }
 
 function buildFireNotice({ order, course, bilingual = true }) {
-  const heading  = order.order_type === 'takeaway'
-    ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
-    : tableHeading(order);
+  const heading  = orderHeading(order);   // SEPOS-TA-LABEL-002 — label-first, all order types
   const courseEN = COURSES_EN[course] || 'ITEMS';
   // Korakot 2026-06-02: no Thai on the category — English label only.
   const now      = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
@@ -471,11 +545,14 @@ function buildFireNotice({ order, course, bilingual = true }) {
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     rule('='), lf(),
-    CMD.BOLD_ON, CMD.SIZE_BIG, txt('FIRE'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    CMD.BOLD_ON, CMD.SIZE_BIG, txt('CALL'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),   // SEPOS-WORDING-001 — 'CALL' not 'FIRE' (Korakot, 28 Aug)
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseEN), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     rule('='), lf(),
     CMD.ALIGN_CENTER,
-    txt(`${now}  ·  Order #${order.id}`), lf(2),
+    // SEPOS-TA-LABEL-002 — the footer names the table too, so even a torn
+    // card identifies its order. '-' not '·': the middle dot mangles to 'À'
+    // on Thai-codepage printers (Thann Thai photo, 28 Aug).
+    txt(`${now} - ${heading} - Order #${order.id}`), lf(2),
     CMD.CUT,
   ];
 
@@ -488,9 +565,7 @@ function buildFireNotice({ order, course, bilingual = true }) {
 function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepage = 30, fontScale = 'large' }) {
   const sentBy = (items.find(i => i && i.sent_by) || {}).sent_by || null; // SEPOS-SENTBY-001
   const itemSize = scaleCmd(fontScale); // SEPOS-PRINT-FONT-001 — per-role text size
-  const heading = order.order_type === 'takeaway'
-    ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
-    : tableHeading(order);
+  const heading = orderHeading(order);   // SEPOS-TA-LABEL-002 — label-first, all order types
   const courseEN = COURSES_EN[course] || 'ITEMS';
   // Korakot 2026-06-02: don't print Thai on the category (course)
   // header — STARTERS/MAINS in English is enough. Thai stays only on
@@ -520,7 +595,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
         // = SIZE_BIG, i.e. today's output). Korakot 2026-06-02: "letters need
         // to be a little bit wider" — now operator-configurable per SEPOS-PRINT-FONT-001.
         CMD.BOLD_ON, itemSize,
-        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' / ' + item.notes : ''}`),
+        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' — ' + item.notes : ''}`),   // SEPOS-TICKET-LAYOUT-001 — dash joiner
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
         // Thai item name — same scale as the English line above.
         nameAlt    ? [CMD.BOLD_ON, itemSize, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
@@ -533,7 +608,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
     }),
     rule('='), lf(),
     CMD.ALIGN_CENTER,
-    txt(`${now}  ·  Order #${order.id}`), lf(2),
+    txt(`${now} - Order #${order.id}`), lf(2),
     CMD.CUT,
   ];
 
@@ -545,9 +620,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
 function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage = 30, fontScale = 'large' }) {
   const sentBy = (items.find(i => i && i.sent_by) || {}).sent_by || null; // SEPOS-SENTBY-001
   const itemSize = scaleCmd(fontScale); // SEPOS-PRINT-FONT-001 — per-role text size
-  const heading = order.order_type === 'takeaway'
-    ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
-    : tableHeading(order);
+  const heading = orderHeading(order);   // SEPOS-TA-LABEL-002 — label-first, all order types
   const now = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
   const headSize = heading.length <= 10 ? CMD.SIZE_BIG : CMD.SIZE_TALL;
 
@@ -571,7 +644,7 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
         // Item line — sized by the tenant's kitchen/bar font scale (default
         // 'large' = SIZE_BIG = today's output). SEPOS-PRINT-FONT-001.
         CMD.BOLD_ON, itemSize,
-        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' / ' + item.notes : ''}`),
+        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' — ' + item.notes : ''}`),
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
         // Thai item name — same scale as the English line above.
         nameAlt    ? [CMD.BOLD_ON, itemSize, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
@@ -612,7 +685,7 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
     ...courseBlocks,
     rule('='), lf(),
     CMD.ALIGN_CENTER,
-    txt(`${now}  ·  Order #${order.id}`), lf(2),
+    txt(`${now} - Order #${order.id}`), lf(2),
     CMD.CUT,
   ];
 
@@ -638,12 +711,12 @@ function wrapDeliveryAddress(address) {
 // Distinctive layout (📢 banner, large heading, big-text message body)
 // so the chef notices immediately. Different from a regular kitchen
 // ticket — no items, no course header, just the waiter's message.
-function buildKitchenMessage({ order_id, table_number, table_label, order_type, customer_name, message, waiter_name }) {
+function buildKitchenMessage({ order_id, table_number, table_label, table_is_takeaway, order_type, customer_name, message, waiter_name }) {
   // Table NAME wins over the raw number ("Bar 2" is table_number 2 — the
-  // chef knows the name, not the internal number). Same rule as tableHeading.
+  // chef knows the name, not the internal number). Same rule as tableHeading —
+  // and SEPOS-TA-LABEL-001: a takeaway SLOT heading gets the TAKEAWAY prefix.
   const label = table_label && String(table_label).trim();
-  const heading = label ? label.toUpperCase()
-                : table_number ? `TABLE ${table_number}`
+  const heading = (label || table_number) ? ticketTableLabel({ table_label, table_number, table_is_takeaway })
                 : order_type === 'takeaway' ? `TAKEAWAY${order_id ? ' #' + order_id : ''}`
                 : 'KITCHEN MESSAGE';
   const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -675,7 +748,7 @@ function buildKitchenMessage({ order_id, table_number, table_label, order_type, 
     ...wrapped.flatMap(line => [txt(line), lf()]),
     CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     rule('='), lf(),
-    txt(`${now}${waiter_name ? '  ·  ' + waiter_name : ''}${order_id ? '  ·  Order #' + order_id : ''}`), lf(2),
+    txt(`${now}${waiter_name ? ' - ' + waiter_name : ''}${order_id ? ' - Order #' + order_id : ''}`), lf(2),
     CMD.CUT,
   ];
   return flatten(parts);
@@ -1121,7 +1194,48 @@ async function printReceipt(settings, order, items, paymentDetails) {
   const printerName = settings.printer_receipt_name || '';
   const lprQueue    = settings.printer_receipt_lpr_queue || 'lp';
   if (!ip && !printerName) throw new Error('NO_IP');
+  // SEPOS-RECEIPT-FONT-001 — rendered typeface first, classic auto-fallback.
+  if (await tryRenderedReceipt({ ip, port, printerName, lprQueue }, settings, order, items, paymentDetails)) return;
   await sendRaw(ip, port, buildReceipt({ order, items, settings, paymentDetails }), { printerName, lprQueue });
+}
+
+// SEPOS-RECEIPT-FONT-001 — the customer bill / settled receipt in the same
+// rendered typeface as kitchen tickets (Korakot, 16 Aug: "the bill font is
+// not nice"). Money math comes from computeReceiptModel — shared with the
+// classic builder — so both paths always print the same numbers. The logo
+// bitmap and review QR stay as native ESC/POS blocks around the text raster
+// (both customer-bill-only per SEPOS-PAPER-SAVER-001). Any failure returns
+// false so the classic builder runs — a font problem can never lose a bill.
+async function tryRenderedReceipt(dest, settings, order, items, paymentDetails) {
+  if (!dest.ip && !dest.printerName) return false;
+  try {
+    const tr = require('./ticketRender');
+    const model = computeReceiptModel({ order, items, settings, paymentDetails });
+    // Thai/CJK anywhere the receipt prints (incl. venue name/address/footer,
+    // which kitchen tickets never carry) → classic codepage path.
+    if (tr.hasUnrenderableText(order, items, [model.name, model.addr, model.footer])) return false;
+    // One fixed size — Korakot 16 Aug: only ORDER tickets are size-adjustable.
+    const raster = await tr.receiptRaster(order, model);
+    const parts = [
+      CMD.INIT,
+      ...(model.isSettledReceipt ? [] : buildLogoBlock(settings)),
+      raster,
+      (settings.google_review_url && !model.isSettledReceipt) ? [
+        lf(),
+        CMD.ALIGN_CENTER,
+        qrCode(settings.google_review_url),
+        lf(),
+        txt(String(settings.receipt_qr_caption || 'Scan to leave us a review').slice(0, 42)), lf(),
+      ] : [],
+      lf(3),
+      CMD.CUT,
+    ];
+    await sendRaw(dest.ip, dest.port, flatten(parts), { printerName: dest.printerName, lprQueue: dest.lprQueue });
+    return true;
+  } catch (e) {
+    console.warn('[print] rendered receipt failed — classic fallback:', e.message);
+    return false;
+  }
 }
 
 // SEPOS-DRAWER-001 — open the cash drawer via the RECEIPT printer's RJ11 kick
@@ -1148,7 +1262,7 @@ async function printFireNotice(settings, order, course) {
   // glyphs and the bilingual line just renders as garbage.
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
-  const buf = buildFireNotice({ order, course, bilingual });
+  const buf = Buffer.concat([beepPrefix(settings), buildFireNotice({ order, course, bilingual })]);
   if (ip) {
     // Network: send each copy as its own job (back-to-back streams can garble
     // some print servers, and _sendTcp already paces them).
@@ -1168,8 +1282,17 @@ async function printFireNotice(settings, order, course) {
 // lands (SEPOS-TICKET-FONT-002). Any render/send failure returns false so the
 // caller's classic builder runs — a font problem can never lose a ticket.
 async function tryRenderedTicket(dest, settings, order, items, opts = {}) {
-  if (settings.kitchen_ticket_style === 'classic') return false;
-  if (settings.kitchen_language === 'en_th') return false;
+  // SEPOS-TICKET-SIZE-001 — the rendered font is now the ONLY visible mode
+  // (Korakot, 16 Aug: "remove the built-in font option"). The classic path
+  // survives purely as the automatic fallback below (render failure, Thai
+  // text, bilingual mode) so a font problem can never lose a ticket. Any
+  // legacy kitchen_ticket_style='classic' value is deliberately ignored.
+  // SEPOS-THAI-TICKET-001 follow-up (Yum Yum, 24 Aug): the en_th bypass is
+  // RETIRED. It predates the Sarabun renderer — its only job was to reach the
+  // classic codepage path for Thai, which prints garbage on most UK printers.
+  // The renderer handles Thai natively and always prints name_alt, so the old
+  // toggle must never disable it again (it was re-enabled twice on site today
+  // by people reasonably assuming it was the fix).
   if (!dest.ip && !dest.printerName) return false;
   try {
     // Inside the try (review M2): if ticketRender/pureimage ever fails to LOAD,
@@ -1177,7 +1300,7 @@ async function tryRenderedTicket(dest, settings, order, items, opts = {}) {
     const tr = require('./ticketRender');
     // Thai/CJK text in any field → classic (codepage) path so it prints, not blanks.
     if (tr.hasUnrenderableText(order, items)) return false;
-    const buf = await tr.kitchenTicketRaster(order, items, opts);
+    const buf = Buffer.concat([beepPrefix(settings), await tr.kitchenTicketRaster(order, items, { ...opts, size: settings.kitchen_ticket_size, bilingual: settings.kitchen_language === 'en_th' })]);
     for (let c = 0; c < (dest.copies || 1); c++) {
       await sendRaw(dest.ip, dest.port, buf, { printerName: dest.printerName, lprQueue: dest.lprQueue });
     }
@@ -1202,7 +1325,7 @@ async function printKitchenTicket(settings, order, items, course) {
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
   const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
-  const buf = buildKitchenTicket({ order, items, course, bilingual, thaiCodepage, fontScale: settings.kitchen_font_scale });
+  const buf = Buffer.concat([beepPrefix(settings), buildKitchenTicket({ order, items, course, bilingual, thaiCodepage, fontScale: settings.kitchen_font_scale })]);
   if (ip) {
     // Network: send each copy as its own job (back-to-back streams can garble
     // some print servers, and _sendTcp already paces them).
@@ -1230,7 +1353,7 @@ async function printFullKitchenTicket(settings, order, items) {
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
   const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
-  const buf = buildFullKitchenTicket({ order, items, bilingual, thaiCodepage, fontScale: settings.kitchen_font_scale });
+  const buf = Buffer.concat([beepPrefix(settings), buildFullKitchenTicket({ order, items, bilingual, thaiCodepage, fontScale: settings.kitchen_font_scale })]);
   if (ip) {
     // Network: send each copy as its own job (back-to-back streams can garble
     // some print servers, and _sendTcp already paces them).
@@ -1257,7 +1380,7 @@ async function printKitchenToPrinter(printer, settings, order, items) {
   if (await tryRenderedTicket({ ip, port, printerName, lprQueue, copies }, settings, order, items)) return;
   const bilingual = settings.kitchen_language === 'en_th';
   const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
-  const buf = buildFullKitchenTicket({ order, items, bilingual, thaiCodepage, fontScale: settings.kitchen_font_scale });
+  const buf = Buffer.concat([beepPrefix(settings), buildFullKitchenTicket({ order, items, bilingual, thaiCodepage, fontScale: settings.kitchen_font_scale })]);
   if (ip) {
     for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName, lprQueue });
   } else {
@@ -1279,7 +1402,7 @@ async function printBarTicket(settings, order, items) {
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
   const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
-  await sendRaw(ip, port, buildKitchenTicket({ order, items, course: 4, bilingual, thaiCodepage, fontScale: settings.bar_font_scale }), { printerName, lprQueue });
+  await sendRaw(ip, port, Buffer.concat([beepPrefix(settings), buildKitchenTicket({ order, items, course: 4, bilingual, thaiCodepage, fontScale: settings.bar_font_scale })]), { printerName, lprQueue });
 }
 
 // testPrint accepts an optional printer_name so the admin Test button can
@@ -1440,6 +1563,51 @@ async function printReportText(settings, lines) {
   return sendRaw(ip, port, buf, { printerName: name });
 }
 
+// SEPOS-ANDROID-RENDER-BUFFER-001 (Korakot, 10 Sep) — the native app (satellite /
+// host tablet) prints over the LAN by FETCHING an ESC/POS buffer from
+// /api/print/buffers/* and pushing it to the printer itself. Those endpoints
+// returned the CLASSIC built-in-printer-font text, while the server's own direct
+// print path renders a nice RASTER first (tryRenderedTicket / tryRenderedReceipt).
+// Net effect Korakot saw: the satellite's kitchen tickets printed blocky and broke
+// words mid-line ("Oy/ster"), the bill truncated ("...Jasmi") — all different from
+// the main till. These helpers return the SAME rendered raster the main till uses,
+// keeping the classic builder ONLY as the Thai/CJK + render-failure fallback, so
+// the native LAN print matches the main till.
+async function kitchenTicketBuffer(settings, order, items, opts, classicFallback) {
+  try {
+    const tr = require('./ticketRender');
+    if (!tr.hasUnrenderableText(order, items)) {
+      return await tr.kitchenTicketRaster(order, items, {
+        ...(opts || {}),
+        size: settings.kitchen_ticket_size,
+        bilingual: settings.kitchen_language === 'en_th',
+      });
+    }
+  } catch (e) { console.warn('[print] kitchen buffer raster failed — classic fallback:', e.message); }
+  return classicFallback();
+}
+
+async function receiptBuffer(settings, order, items, paymentDetails = {}) {
+  try {
+    const tr = require('./ticketRender');
+    const model = computeReceiptModel({ order, items, settings, paymentDetails });
+    if (!tr.hasUnrenderableText(order, items, [model.name, model.addr, model.footer])) {
+      const raster = await tr.receiptRaster(order, model);
+      return flatten([
+        CMD.INIT,
+        ...(model.isSettledReceipt ? [] : buildLogoBlock(settings)),
+        raster,
+        (settings.google_review_url && !model.isSettledReceipt) ? [
+          lf(), CMD.ALIGN_CENTER, qrCode(settings.google_review_url), lf(),
+          txt(String(settings.receipt_qr_caption || 'Scan to leave us a review').slice(0, 42)), lf(),
+        ] : [],
+        lf(3), CMD.CUT,
+      ]);
+    }
+  } catch (e) { console.warn('[print] receipt buffer raster failed — classic fallback:', e.message); }
+  return buildReceipt({ order, items, settings, paymentDetails });
+}
+
 module.exports = {
   printReceipt,
   openCashDrawer,         // SEPOS-DRAWER-001
@@ -1453,7 +1621,11 @@ module.exports = {
   testPrint,
   findCupsQueueForIp,
   buildReceipt,           // exported for mock-receipt test print
+  computeReceiptModel,    // SEPOS-RECEIPT-FONT-001 — shared with ticketRender + previews
   buildTestPage,          // SEPOS-ANDROID-001 — buffer endpoints for the native app
+  kitchenTicketBuffer,    // SEPOS-ANDROID-RENDER-BUFFER-001 — rendered-raster buffer for the native LAN print
+  receiptBuffer,          // SEPOS-ANDROID-RENDER-BUFFER-001
+  buildReportText,        // SEPOS-ANDROID-REPORT-BUFFER-001 — Z/report buffer for the native LAN print
   buildKitchenTicket,     // SEPOS-ANDROID-001
   buildFullKitchenTicket, // SEPOS-ANDROID-001
   buildFireNotice,        // SEPOS-ANDROID-001 — native fire-notice buffer

@@ -55,6 +55,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const [mixMethod, setMixMethod]           = useState('Cash');
   const [showQrPay, setShowQrPay]           = useState(false); // SIAMPAY-QR-001
   const [mixInput,  setMixInput]            = useState('');
+  // SEPOS-TIPS-001 — optional explicit tip (£) typed at confirm time, for
+  // venues that ring the BILL amount and add the tip on the card machine.
+  const [mixTipBox, setMixTipBox]           = useState('');
   // SEPOS-VOUCHER-SPLIT-001 — voucher as one tender inside a mixed payment.
   const [mixVoucherCode, setMixVoucherCode] = useState('');
   const [mixVoucherAmt,  setMixVoucherAmt]  = useState('');
@@ -245,13 +248,36 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const paidCount      = splitPaid.length;
   const remainingEqual = billTotal - (paidCount * splitAmount);
 
+  // SEPOS-SPLIT-UNITS-001 — split-by-item works per UNIT, not per line:
+  // "2× Singha" becomes two tappable rows so two people can take one each
+  // (Korakot 2026-08-26 — the whole line could only go to one person).
+  // Assignment keys are `${item.id}:u${n}`; a quantity-1 line looks as before.
+  const splitUnits = billItems.flatMap(item => {
+    const q = Math.max(1, Number(item.quantity) || 1);
+    const gross = item.unit_price * q;
+    const lineD = item.discount_value > 0 ? (item.discount_type === 'percent' ? gross * (item.discount_value / 100) : Math.min(item.discount_value, gross)) : 0;
+    return Array.from({ length: q }, (_, u) => ({
+      ukey: `${item.id}:u${u}`, item, unitIdx: u, unitCount: q,
+      unitNet: (gross - lineD) / q,
+    }));
+  });
+
   const getPersonTotal = (personIdx) => {
-    const personItems = billItems.filter(item => itemAssignments[item.id] === personIdx);
-    const personSubtotal = personItems.reduce((sum, i) => {
-      const p = i.unit_price * i.quantity;
-      const d = i.discount_value > 0 ? i.discount_type === 'percent' ? p * (i.discount_value / 100) : Math.min(i.discount_value, p) : 0;
-      return sum + p - d;
-    }, 0);
+    const personUnits = splitUnits.filter(u => itemAssignments[u.ukey] === personIdx);
+    // Group the person's units back into display lines (n of the original q).
+    const byItem = new Map();
+    for (const u of personUnits) {
+      const g = byItem.get(u.item.id) || { ...u.item, quantity: 0 };
+      g.quantity += 1; byItem.set(u.item.id, g);
+    }
+    const personItems = [...byItem.values()].map(g => ({
+      ...g,
+      // scale a fixed-£ line discount to the share of units taken; percent scales itself
+      discount_value: g.discount_value > 0 && g.discount_type !== 'percent'
+        ? g.discount_value * (g.quantity / Math.max(1, Number(billItems.find(b => b.id === g.id)?.quantity) || 1))
+        : g.discount_value,
+    }));
+    const personSubtotal = personUnits.reduce((sum, u) => sum + u.unitNet, 0);
     // SEPOS-DISCOUNT-SCOPE-001 — only this person's IN-SCOPE £ carries the
     // discount (their drinks for a drinks discount; everything when unscoped).
     const personDiscount     = scopedBase(personItems, order.discount_scope || 'all') * discountRate;
@@ -260,8 +286,8 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     return { items: personItems, subtotal: personSubtotal, discount: personDiscount, afterDiscount: personAfterDiscount, service: personService, total: personAfterDiscount + personService };
   };
 
-  const unassignedItems = billItems.filter(item => itemAssignments[item.id] === undefined);
-  const allAssigned     = unassignedItems.length === 0 && billItems.length > 0;
+  const unassignedItems = splitUnits.filter(u => itemAssignments[u.ukey] === undefined);
+  const allAssigned     = unassignedItems.length === 0 && splitUnits.length > 0;
   const personColors    = ['#e94560','#3b82f6','#22c55e','#8b5cf6','#f97316','#06b6d4','#ec4899','#eab308'];
 
   // SEPOS-PENNY-001 (part 2) — the same push-from-the-right entry for the
@@ -309,8 +335,15 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const handlePrintBill = () => {
     // SEPOS-DEPOSIT-PRINT — if a booking deposit has been applied, show it on
     // the printed bill (Deposit paid −£X + Balance due) so the customer sees it.
-    const depositPaid = splitTenders.filter(t => t.method === 'Deposit')
+    // BOTH deposit models count: receiptTotals.depositPaid already carries a
+    // deposit redeemed on the Order screen (model A, SEPOS-DEPOSIT-ORDER-001);
+    // tender rows cover the older Mixed-Payment Deposit tender. The old code
+    // OVERRODE the model-A amount with the tender sum — £0 pre-payment — so an
+    // order-applied deposit showed on screen but vanished from the printed
+    // bill (Fern, 17 Aug).
+    const tenderDeposit = splitTenders.filter(t => t.method === 'Deposit')
       .reduce((s, t) => s + Number(t.amount || 0), 0);
+    const depositPaid = (receiptTotals.depositPaid || 0) + tenderDeposit;
     printReceipt({ order: { ...order }, items: billItems, settings: { ...settings }, paymentDetails: { ...receiptTotals, depositPaid } });
   };
 
@@ -531,7 +564,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
       }
     }
     setSplitTenders([]); setMixVoucherCode(''); setMixVoucherAmt(''); setMixVoucherErr('');
-    setMixDepositCode(''); setMixDepositAmt('');
+    setMixDepositCode(''); setMixDepositAmt(''); setMixTipBox('');
     setStage('bill');
   };
 
@@ -657,7 +690,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     // button, so `newPaid.length >= splitItemCount` could never fire and the
     // receipt stage was unreachable (bill stuck mid-split). isLast keys on the
     // people who actually HOLD items.
-    const personsWithItems = new Set(billItems.map(i => itemAssignments[i.id]).filter(p => p !== undefined));
+    const personsWithItems = new Set(splitUnits.map(u => itemAssignments[u.ukey]).filter(p => p !== undefined));
     const isLast = personsWithItems.size > 0
       ? [...personsWithItems].every(p => newPaid.includes(p))
       : newPaid.length >= splitItemCount;
@@ -700,6 +733,12 @@ export default function BillScreen({ orderId, onClose, onPay }) {
         billTotal: p.total,
         method: 'Split by Item',
         amountPaid: p.total,
+        // SEPOS-SPLIT-PRINT-001 — the thermal path sends only order_id +
+        // totals, so the server printed the WHOLE order's items under this
+        // person's total. Name the person's exact lines: their share of a
+        // line's quantity and their scaled line discount travel too (a person
+        // can take 2 of a line's 3 units).
+        split_items: p.items.map(i => ({ id: i.id, quantity: i.quantity, discount_value: i.discount_value })),
       }
     });
     // SEPOS-062 — print only; staff taps 💵 Cash / 💳 Card to settle this person.
@@ -1113,13 +1152,19 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   // card is gone from this path.
                   const doConfirm = async (printAfter) => {
                     if (paying) return;
-                    const paid = splitTenders.reduce((s, t) => s + t.amount, 0);
+                    let paid = splitTenders.reduce((s, t) => s + t.amount, 0);
+                    // SEPOS-TIPS-001 — the explicit tip box (venue rings the
+                    // bill amount, tip added on the card machine). The machine
+                    // DID take bill+tip on card, so the tip is folded into the
+                    // recorded card tender: card takings keep matching the PDQ
+                    // settlement, and `tip` marks the gratuity share.
+                    const boxTip = Math.max(0, Number(mixTipBox) || 0);
                     // SEPOS-CASHCHANGE-001 — cash change is handed BACK, so it must not be
                     // recorded as money taken. Reduce the cash tender(s) by the change so the
                     // RECORDED tenders foot to the BILL, not the over-tender. (Card over-tender
                     // is a genuine tip — mixTip — and is left intact.)
                     let toDrop = mixChange;
-                    const recTenders = splitTenders.map(t => {
+                    let recTenders = splitTenders.map(t => {
                       if (toDrop > 0.001 && t.method === 'Cash') {
                         const cut = Math.min(toDrop, t.amount);
                         toDrop = Number((toDrop - cut).toFixed(2));
@@ -1127,8 +1172,19 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                       }
                       return t;
                     }).filter(t => t.amount > 0.001);
+                    // SEPOS-TIPS-001 — add the box tip onto the first non-Cash
+                    // tender (the box only renders when one exists).
+                    let appliedTip = 0;
+                    if (boxTip > 0.001) {
+                      let applied = false;
+                      recTenders = recTenders.map(t => {
+                        if (!applied && t.method !== 'Cash') { applied = true; return { ...t, amount: Number((t.amount + boxTip).toFixed(2)) }; }
+                        return t;
+                      });
+                      if (applied) { paid = Number((paid + boxTip).toFixed(2)); appliedTip = boxTip; }
+                    }
                     let method = recTenders.length === 1 ? recTenders[0].method : 'Split';
-                    let pd = { method, amountPaid: paid, tip: mixTip, change: mixChange, tenders: recTenders };
+                    let pd = { method, amountPaid: paid, tip: Number((mixTip + appliedTip).toFixed(2)), change: mixChange, tenders: recTenders };
                     // F2 — deposit fully covered the bill: nothing left to tender,
                     // but /pay rejects £0. Record the deposit AS the tender so the
                     // bill closes covered (same rows a pay-screen deposit writes).
@@ -1150,9 +1206,21 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                       alert('Payment could not be recorded: ' + (e?.message || 'unknown') + '\nThe bill is still open — try again.');
                     } finally { setPaying(false); }
                   };
-                  const suffix = mixChange > 0 ? ` (£${mixChange.toFixed(2)} change)` : mixTip > 0 ? ` (£${mixTip.toFixed(2)} tip)` : '';
+                  // SEPOS-TIPS-001 — live tip total: card over-tender + the box.
+                  const cardTenderPresent = splitTenders.some(t => t.method !== 'Cash');
+                  const liveTip = Number((mixTip + (cardTenderPresent ? Math.max(0, Number(mixTipBox) || 0) : 0)).toFixed(2));
+                  const suffix = mixChange > 0 ? ` (£${mixChange.toFixed(2)} change)` : liveTip > 0 ? ` (£${liveTip.toFixed(2)} tip)` : '';
                   return (
                     <>
+                      {cardTenderPresent && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: '#8b5cf6', whiteSpace: 'nowrap' }}>💜 Tip on card machine</span>
+                          <div style={{ position: 'relative', flex: 1 }}>
+                            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
+                            <AmountInput value={mixTipBox} onChange={setMixTipBox} placeholder="0.00" style={{ width: '100%', height: 44, padding: '0 10px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                          </div>
+                        </div>
+                      )}
                       <button onClick={() => doConfirm(false)} disabled={paying} style={{ width: '100%', height: 56, borderRadius: 12, border: 'none', background: paying ? '#9ca3af' : '#22c55e', color: '#fff', fontWeight: 800, fontSize: 17, cursor: paying ? 'wait' : 'pointer', marginBottom: 10 }}>{paying ? 'Recording…' : <>✓ Confirm — £{billTotal.toFixed(2)}{suffix}</>}</button>
                       <button onClick={() => doConfirm(true)} disabled={paying} style={{ width: '100%', height: 50, borderRadius: 12, border: '2px solid #22c55e', background: '#fff', color: '#15803d', fontWeight: 800, fontSize: 15, cursor: paying ? 'wait' : 'pointer', marginBottom: 12 }}>🖨 Confirm &amp; Print receipt</button>
                     </>
@@ -1247,21 +1315,20 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   Tap items to assign to Person {activePerson+1}:
                   {unassignedItems.length>0 && <span style={{ color:'#e94560', marginLeft:8 }}>{unassignedItems.length} unassigned</span>}
                 </div>
-                {billItems.map(item => {
-                  const assignedTo=itemAssignments[item.id]; const isAssigned=assignedTo!==undefined;
+                {splitUnits.map(u => {
+                  const item=u.item;
+                  const assignedTo=itemAssignments[u.ukey]; const isAssigned=assignedTo!==undefined;
                   const ac=isAssigned?personColors[assignedTo]:null;
-                  const p=item.unit_price*item.quantity;
-                  const d=item.discount_value>0?item.discount_type==='percent'?p*(item.discount_value/100):Math.min(item.discount_value,p):0;
                   return (
-                    <div key={item.id} onClick={() => { if(splitItemPaid.includes(assignedTo)) return; setItemAssignments(prev=>({...prev,[item.id]:activePerson})); }}
+                    <div key={u.ukey} onClick={() => { if(splitItemPaid.includes(assignedTo)) return; setItemAssignments(prev=>({...prev,[u.ukey]:activePerson})); }}
                       style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:isMobile?'14px 16px':'12px 16px', borderRadius:10, marginBottom:8, border:`2px solid ${isAssigned?ac:'#e0e0e0'}`, background:isAssigned?`${ac}15`:'white', cursor:'pointer' }}>
                       <div style={{ flex:1 }}>
-                        <div style={{ fontWeight:600, fontSize:isMobile?15:14, color:'var(--brand-primary, #1a1a2e)' }}>{item.quantity}× {item.name}</div>
+                        <div style={{ fontWeight:600, fontSize:isMobile?15:14, color:'var(--brand-primary, #1a1a2e)' }}>{item.name}{u.unitCount>1 && <span style={{ fontWeight:500, fontSize:11, color:'#888', marginLeft:6 }}>{u.unitIdx+1} of {u.unitCount}</span>}</div>
                         {item.notes && <div style={{ fontSize:11, color:'#888' }}>{item.notes}</div>}
-                        {item.discount_value>0 && <div style={{ fontSize:11, color:'#22c55e' }}>🏷️ -£{d.toFixed(2)}</div>}
+                        {item.discount_value>0 && <div style={{ fontSize:11, color:'#22c55e' }}>🏷️ discount included</div>}
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                        <span style={{ fontWeight:700, color:'var(--brand-primary, #1a1a2e)' }}>£{(p-d).toFixed(2)}</span>
+                        <span style={{ fontWeight:700, color:'var(--brand-primary, #1a1a2e)' }}>£{u.unitNet.toFixed(2)}</span>
                         {isAssigned
                           ? <div style={{ background:ac, color:'white', borderRadius:20, padding:'3px 10px', fontSize:11, fontWeight:700 }}>P{assignedTo+1}</div>
                           : <div style={{ background:personColors[activePerson], color:'white', borderRadius:20, padding:'3px 10px', fontSize:11, fontWeight:700, opacity:0.4 }}>P{activePerson+1}</div>

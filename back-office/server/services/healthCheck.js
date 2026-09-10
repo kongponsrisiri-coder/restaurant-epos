@@ -112,7 +112,11 @@ async function pruneOldRows(clientId) {
 async function tickAllClients() {
   try {
     const r = await pool.query(
-      "SELECT id, railway_url, status FROM clients WHERE status IN ('active', 'trial')"
+      // SEPOS-OPS-LIVE-001 (Korakot, 25 Aug): 'live' = trading but not yet
+      // billing (Baanrai: live until their VDIT contract ends) — must be
+      // monitored like any paying client. 'setup' tenants with a URL ping
+      // too, so go-live eve (Yum Yum) shows Orders Today instead of "—".
+      "SELECT id, railway_url, status FROM clients WHERE status IN ('active', 'trial', 'live', 'setup') AND railway_url IS NOT NULL AND railway_url <> ''"
     );
     if (r.rows.length === 0) return;
     // Run in parallel — each ping is independent, AbortController bounds the time.

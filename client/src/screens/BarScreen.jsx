@@ -35,7 +35,7 @@ function Timer({ startedAt }) {
   );
 }
 
-export default function BarScreen() {
+export default function BarScreen({ onLogout }) {
   const [orders, setOrders] = useState([]);
   const [completedItems, setCompletedItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -179,6 +179,13 @@ export default function BarScreen() {
           <button onClick={() => { fetchOrders(); fetchCompleted(); }} style={{ background: '#1e293b', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer' }}>
             ↻
           </button>
+          {/* SEPOS-KDS-LOGOUT-001 — bar role has no navbar and no idle auto
+              sign-out; this is its only way out besides quitting the app. */}
+          {onLogout && (
+            <button onClick={onLogout} style={{ background: '#1e293b', color: '#f87171', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+              Log out
+            </button>
+          )}
         </div>
       </div>
 

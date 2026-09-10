@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, shell, clipboard, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, shell, clipboard, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -24,6 +24,12 @@ if (!gotSingleInstanceLock) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       if (!mainWindow.isVisible()) mainWindow.show();
       mainWindow.focus();
+    } else if (app.isReady()) {
+      // SEPOS-FERN-WINDOW-001 — the window was CLOSED (X button) while the
+      // headless server kept running for tablets/printers (window-all-closed
+      // is deliberately a no-op). Clicking the app icon then did NOTHING —
+      // "the icon is there but it's not open" (Fern, 3 Sep). Recreate it.
+      createWindow();
     }
   });
 }
@@ -49,7 +55,11 @@ function loadConfig() {
   try {
     const p = getConfigPath();
     if (!fs.existsSync(p)) return null;
-    return JSON.parse(fs.readFileSync(p, 'utf8'));
+    // Strip a UTF-8 BOM — a config.json written by Windows PowerShell's
+    // `-Encoding UTF8` starts with ﻿, JSON.parse throws, and the app
+    // silently falls back to the first-run wizard even though a valid config
+    // exists (Tori Nori install, 18 Aug).
+    return JSON.parse(fs.readFileSync(p, 'utf8').replace(/^﻿/, ''));
   } catch (err) {
     console.warn('[config] load failed:', err.message);
     return null;
@@ -64,6 +74,31 @@ function saveConfig(data) {
 
 // IPC handler registered once at module load — setup window invokes it.
 // SEPOS-REMOTE-INSTALL-001 — clipboard read for the wizard's 📋 Paste buttons.
+// SEPOS-WIZARD-INPUT-001 — the first-run wizard's typed/paste input was
+// unreliable over some remote sessions (Akin install). Belt-and-braces: let the
+// operator pick a config.json file (VDIT/TeamViewer file transfer → the till)
+// and the wizard fills every field from it. Returns the parsed fields or null.
+ipcMain.handle('pick-config-file', async () => {
+  try {
+    const r = await dialog.showOpenDialog({
+      title: 'Load SiamEPOS config.json',
+      properties: ['openFile'],
+      filters: [{ name: 'Config', extensions: ['json', 'txt'] }],
+    });
+    if (r.canceled || !r.filePaths || !r.filePaths[0]) return null;
+    const raw = fs.readFileSync(r.filePaths[0], 'utf8').replace(/^\uFEFF/, '');
+    const d = JSON.parse(raw);
+    return {
+      restaurant_name: d.restaurant_name || '',
+      cloud_api_url:   d.cloud_api_url || '',
+      restaurant_id:   d.restaurant_id || '',
+      sync_secret:     d.sync_secret || '',
+    };
+  } catch (e) {
+    return { error: e.message };
+  }
+});
+
 ipcMain.handle('read-clipboard', () => {
   try { return clipboard.readText() || ''; } catch { return ''; }
 });
@@ -252,9 +287,11 @@ async function runSetupWizard() {
     text-transform:uppercase; letter-spacing:0.05em; }
   .fieldrow { display:flex; gap:8px; align-items:stretch; }
   .fieldrow input { flex:1; }
-  .pastebtn { flex:none; padding:0 12px; border-radius:10px; cursor:pointer;
+  .pastebtn { flex:none; width:auto; margin-top:0; padding:0 14px; border-radius:10px; cursor:pointer;
     border:1px solid rgba(201,168,76,0.4); background:rgba(201,168,76,0.12);
     color:#C9A84C; font-size:12px; font-weight:700; white-space:nowrap; }
+  /* the generic button rule below sets width:100% + margin-top — the Paste
+     button must opt out or it swallows the row and squashes the input */
   .pastebtn:active { background:rgba(201,168,76,0.3); }
   input { width:100%; padding:11px 14px; border-radius:10px;
     border:1px solid rgba(201,168,76,0.3); background:rgba(255,255,255,0.05);
@@ -299,6 +336,7 @@ async function runSetupWizard() {
 
   <div id="error"></div>
 
+  <button id="loadfile" type="button" style="background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.25);margin-bottom:10px;">📁 Load from config.json file</button>
   <button id="save">Save &amp; Launch SiamEPOS</button>
 
 <script>
@@ -321,6 +359,21 @@ async function runSetupWizard() {
         clearError();
       } catch (e) { showError('Could not read the clipboard: ' + e); }
     });
+  });
+
+  // SEPOS-WIZARD-INPUT-001 — load every field from a config.json file.
+  const loadBtn = $('loadfile');
+  if (loadBtn) loadBtn.addEventListener('click', async () => {
+    clearError();
+    try {
+      const d = await window.siamepos.pickConfigFile();
+      if (!d) return;
+      if (d.error) { showError('Could not read that file: ' + d.error); return; }
+      if (d.restaurant_name) $('name').value = d.restaurant_name;
+      if (d.cloud_api_url)   $('url').value  = d.cloud_api_url;
+      if (d.restaurant_id)   $('rid').value  = d.restaurant_id;
+      if (d.sync_secret)     $('secret').value = d.sync_secret;
+    } catch (e) { showError('Could not load the file: ' + e); }
   });
 
   btn.addEventListener('click', async () => {
@@ -373,6 +426,29 @@ let mainWindow = null;
 let setupWindow = null;
 let tray = null;
 let serverProcess = null;
+// SEPOS-PRO-SERVER-WATCH-001 (7 Sep 2026): the embedded server died at ~09:55 on
+// Korakot's Mac and the till sat behind a live window for 7 hours showing
+// "Staff list unavailable" — main.js never respawned it, and its output went
+// to a stdout nobody could read. Now: server stdout/stderr → userData/server.log
+// (capped at ~2 MB, rotated once), and an unexpected exit respawns with backoff
+// (2 s → 60 s, max 20 tries/hour). A deliberate stop (quit) never respawns.
+let serverStopping = false;
+let serverRespawns = [];
+let serverLogStream = null;
+function serverLogPath() { return path.join(app.getPath('userData'), 'server.log'); }
+function openServerLog() {
+  try {
+    const lp = serverLogPath();
+    try { if (fs.existsSync(lp) && fs.statSync(lp).size > 2 * 1024 * 1024) fs.renameSync(lp, lp + '.1'); } catch {}
+    serverLogStream = fs.createWriteStream(lp, { flags: 'a' });
+    serverLogStream.write(`\n===== ${new Date().toISOString()} server start (app ${app.getVersion()}) =====\n`);
+  } catch (e) { serverLogStream = null; console.warn('[siamepos] server.log unavailable:', e.message); }
+}
+function serverLog(prefix, chunk) {
+  const line = `[${new Date().toISOString()}] ${prefix} ${chunk}`;
+  process.stdout.write(line);
+  try { serverLogStream && serverLogStream.write(line); } catch {}
+}
 let statusPollHandle = null;
 let lastStatus = null;
 
@@ -641,15 +717,28 @@ function startLocalServer() {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  serverProcess.stdout.on('data', (d) => process.stdout.write(`[server] ${d}`));
-  serverProcess.stderr.on('data', (d) => process.stderr.write(`[server] ${d}`));
+  openServerLog();
+  serverProcess.stdout.on('data', (d) => serverLog('[server]', d));
+  serverProcess.stderr.on('data', (d) => serverLog('[server:err]', d));
   serverProcess.on('exit', (code, signal) => {
-    console.log(`[siamepos] server exited (code=${code}, signal=${signal})`);
+    serverLog('[siamepos]', `server exited (code=${code}, signal=${signal})\n`);
     serverProcess = null;
+    if (serverStopping || code === 0) return;
+    // Unexpected death → respawn with backoff, capped per hour so a server that
+    // dies instantly every time can't spin the CPU; after the cap the till shows
+    // its normal "unavailable" state and a relaunch is needed.
+    const now = Date.now();
+    serverRespawns = serverRespawns.filter((t) => now - t < 60 * 60 * 1000);
+    if (serverRespawns.length >= 20) { serverLog('[siamepos]', 'respawn cap reached (20/hour) — giving up until relaunch\n'); return; }
+    const delay = Math.min(60000, 2000 * Math.pow(2, Math.min(5, serverRespawns.length)));
+    serverRespawns.push(now);
+    serverLog('[siamepos]', `respawning server in ${delay} ms (attempt ${serverRespawns.length})\n`);
+    setTimeout(() => { if (!serverStopping && !serverProcess) startLocalServer(); }, delay);
   });
 }
 
 function stopLocalServer() {
+  serverStopping = true;
   if (serverProcess && !serverProcess.killed) {
     try { serverProcess.kill(); } catch {}
     serverProcess = null;
@@ -779,6 +868,16 @@ function setupAutoUpdater() {
     autoUpdater = require('electron-updater').autoUpdater;
     autoUpdater.autoDownload = true;
 
+    // SEPOS-UPDATE-SAFE-001 (Yum Yum, 8-9 Sep) — NEVER install at shutdown.
+    // electron-updater's default is autoInstallOnAppQuit = true: the new
+    // installer runs as the app quits. In a restaurant that is the exact
+    // moment the PC gets switched off at the wall, and on Windows the NSIS
+    // installer replaces the old app before writing the new one. Interrupt it
+    // and the till is left with NO app and a dead shortcut — which is what
+    // Yum Yum opened to. The update still DOWNLOADS quietly; it is applied
+    // only when someone chooses to, with the machine definitely staying on.
+    autoUpdater.autoInstallOnAppQuit = false;
+
     // SEPOS-PRO-006 — persist updater logs to a file so failures are
     // diagnosable on a real till (electron-updater otherwise only logs to a
     // console nobody captures on a packaged app). One line per event in
@@ -821,12 +920,52 @@ function setupAutoUpdater() {
       console.error('[updater]', err?.message || err);
       sendStatus({ state: 'error', message: err?.message || String(err) });
     });
+    // SEPOS-UPDATE-SAFE-001 — WHEN to apply. Shutdown is the dangerous moment
+    // (PC switched off at the wall mid-install = a till with no app). Launch is
+    // the safe one: staff have just opened the app, the machine is on and
+    // staying on, and a failed install can simply be retried by opening it
+    // again. So: if the update lands within 3 minutes of boot, apply it now —
+    // this is what makes "restart the app once" in every patch note still work.
+    // If it lands later (a till open since morning, the 4-hourly check finds a
+    // release mid-service), do NOT touch it: show "Update ready" and let it
+    // install next time the app is opened. Never interrupt service.
+    const BOOT_AT = Date.now();
+    const APPLY_WINDOW_MS = 3 * 60 * 1000;
     autoUpdater.on('update-downloaded', (info) => {
-      console.log('[updater] update downloaded — will install on next restart');
-      sendStatus({ state: 'downloaded', version: info?.version });
-      // Keep the original channel too so the existing restart banner still fires.
+      const atLaunch = (Date.now() - BOOT_AT) < APPLY_WINDOW_MS;
+      const note = atLaunch
+        ? `update ${info?.version} downloaded — applying now (within the launch window)`
+        : `update ${info?.version} downloaded — holding until the next launch (service protection)`;
+      try { autoUpdater.logger?.info(note); } catch (_) { console.log('[updater]', note); }
+      sendStatus({ state: atLaunch ? 'installing' : 'downloaded', version: info?.version });
       if (mainWindow) mainWindow.webContents.send('siamepos:update-ready');
+      if (atLaunch) {
+        setTimeout(() => {
+          try { autoUpdater.quitAndInstall(); }
+          catch (e) { console.warn('[updater] quitAndInstall failed:', e?.message || e); }
+        }, 5000);
+      }
     });
+
+    // SEPOS-UPDATE-SAFE-001 — a till that runs for days used to check ONCE at
+    // boot: Korakot's Mac failed its check after a network change and then sat
+    // on "Check failed" for 24 h, silently missing three releases. Retry a
+    // failed check, and re-check every 4 h so a till that is never restarted
+    // still finds new versions.
+    let updateRetries = 0;
+    const scheduleRetry = () => {
+      if (updateRetries >= 3) return;
+      updateRetries += 1;
+      setTimeout(() => {
+        try { autoUpdater.checkForUpdates().catch(() => {}); } catch (_) {}
+      }, 10 * 60 * 1000);
+    };
+    autoUpdater.on('update-available',     () => { updateRetries = 0; });
+    autoUpdater.on('update-not-available', () => { updateRetries = 0; });
+    autoUpdater.on('error', () => scheduleRetry());
+    setInterval(() => {
+      try { autoUpdater.checkForUpdates().catch(() => {}); } catch (_) {}
+    }, 4 * 60 * 60 * 1000);
 
     autoUpdater.checkForUpdatesAndNotify().catch((err) => {
       console.warn('[updater] check skipped:', err?.message || err);

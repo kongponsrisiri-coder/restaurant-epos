@@ -129,6 +129,18 @@ async function loadSettingsKV() {
         s[`printer_${role}_lpr_queue`] = p.lpr_queue || s[`printer_${role}_lpr_queue`] || 'lp';
         if (role === 'kitchen' && p.copies) s.printer_kitchen_copies = String(p.copies);
       }
+      // SEPOS-PRINT-ORPHAN-001 — same self-clean as applyPrinterRouting: a
+      // role ip matching no active row (and no row carrying the role) is a
+      // deleted printer's ghost. Clear it so pingAll stops alerting on it.
+      for (const role of ['receipt', 'kitchen', 'bar']) {
+        const hasRoleRow = printers.some(x => Number(x['role_' + role]) === 1 && (x.ip || x.name));
+        if (hasRoleRow) continue;
+        const kvIp = s['printer_' + role + '_ip'];
+        if (kvIp && !printers.some(x => x.ip === kvIp)) {
+          s['printer_' + role + '_ip'] = '';
+          s['printer_' + role + '_name'] = '';
+        }
+      }
     }
   } catch { /* no printers table — legacy keys stand */ }
   return s;
@@ -266,7 +278,15 @@ function probe(ip, port) {
   return new Promise((resolve) => {
     const sock = new net.Socket();
     let done = false;
-    const finish = (ok) => { if (!done) { done = true; try { sock.destroy(); } catch {} resolve(ok); } };
+    // SEPOS-PRINT-PROBE-001 — close politely (FIN) on success instead of an
+    // abortive destroy: cheap thermal NICs wedge after hours of accept+RST
+    // (Yum Yum, 24 Aug — printer fine after reboot, dead by afternoon).
+    const finish = (ok) => {
+      if (done) return; done = true;
+      try { ok ? sock.end() : sock.destroy(); } catch {}
+      setTimeout(() => { try { sock.destroy(); } catch {} }, 1500); // FIN not acked → force-close
+      resolve(ok);
+    };
     sock.setTimeout(PING_TIMEOUT_MS);
     sock.once('connect', () => finish(true));
     sock.once('timeout', () => finish(false));
@@ -295,8 +315,16 @@ async function pingAll() {
 
   let changed = false;
   for (const [key, t] of targets) {
+    // SEPOS-PRINT-PROBE-001 — adaptive cadence: a HEALTHY printer is probed
+    // every 5 minutes (the banner doesn't need better); only a failing one
+    // gets the fast 45s cadence so recovery still shows quickly. Cuts the
+    // daily connection count on the printer's fragile single-socket stack
+    // by ~85%.
+    const prevState = health.get(key);
+    if (prevState && prevState.ok && prevState.last_probe && (Date.now() - prevState.last_probe) < 5 * 60 * 1000) continue;
     const ok = await probe(t.ip, t.port);
     const prev = health.get(key) || { ...t, ok: true, strikes: 0, last_ok: null, down_since: null };
+    prev.last_probe = Date.now();
     prev.name = t.name;
     if (ok) {
       if (!prev.ok) changed = true;

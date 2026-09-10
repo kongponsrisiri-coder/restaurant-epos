@@ -58,11 +58,10 @@ function headerOps(ops, order, title, kw = SUNMI_KITCHEN_WIDTH, sentBy = null) {
   let label;
   const t = order && order.order_type;
   if (t && t !== 'dine_in') {
-    // SEPOS-ANDROID-004 — an online DELIVERY order prints "DELIVERY"; a walk-in
-    // takeaway rung up at the till sits on a takeaway table → "TAKEAWAY N";
-    // a website collection with no table → "ONLINE ORDER".
+    // A walk-in takeaway rung up at the till sits on a takeaway table → show
+    // "TAKEAWAY N" so the kitchen knows which collection number it is.
+    // "ONLINE ORDER" is only for website orders that have no table.
     label = t === 'counter' ? 'COUNTER'
-      : (order.order_subtype === 'delivery') ? 'DELIVERY'
       : (t === 'takeaway' && order.table_number != null && order.table_number !== '') ? `TAKEAWAY ${order.table_number}`
       : 'ONLINE ORDER';
   } else {
@@ -74,53 +73,39 @@ function headerOps(ops, order, title, kw = SUNMI_KITCHEN_WIDTH, sentBy = null) {
   ops.push({ op: 'size', v: 'h' }, { op: 'text', v: label }, { op: 'size', v: 'n' }, { op: 'bold', v: false }); // big table no.
   if (order && order.id != null) ops.push({ op: 'text', v: 'Order #' + order.id });
   if (sentBy) ops.push({ op: 'text', v: 'Sent: ' + sentBy }); // SEPOS-SENTBY-001
-  // SEPOS-ANDROID-004 — online / takeaway / delivery header: the kitchen needs
-  // WHO it's for, WHEN to have it ready, and (delivery) WHERE it's going. Mirrors
-  // the desktop takeaway kitchen ticket (printService.printFullKitchenTicket).
-  if (order && t && t !== 'dine_in') {
-    if (order.customer_name)  ops.push({ op: 'text', v: String(order.customer_name) });
-    if (order.customer_phone) ops.push({ op: 'text', v: String(order.customer_phone) });
-    if (order.pickup_time)    ops.push({ op: 'bold', v: true }, { op: 'text', v: 'Pickup ' + fmtTime(order.pickup_time) }, { op: 'bold', v: false });
-    if (order.order_subtype === 'delivery' && order.delivery_address) {
-      ops.push({ op: 'krule', w: Math.min(kw, SUNMI_KITCHEN_WIDTH) });
-      ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'text', v: '-- DELIVERY --' }, { op: 'bold', v: false }, { op: 'align', v: 0 });
-      for (const line of String(order.delivery_address).split(/\r?\n|,\s*/).map(s => s.trim()).filter(Boolean)) {
-        ops.push({ op: 'text', v: line });
-      }
-    }
-  }
-  // SEPOS-AUDIT-002 F13 — the order-level ALLERGY / kitchen note was missing
-  // from the native ticket entirely, on EVERY order type. A Sunmi-only kitchen
-  // was cooking "no peanuts" blind. Kept separate from the ANDROID-004 block
-  // above (which is takeaway/delivery-only and stays as it is) because a
-  // dine-in order carries allergy notes too.
+  // SEPOS-AUDIT-002 F13 — the native ticket printed the heading and item lines
+  // ONLY, dropping everything the desktop/server builders include: who the
+  // order is for, how to reach them, where it's going and — worst — the
+  // order-level ALLERGY note. A Sunmi-only kitchen was cooking online orders
+  // blind to "no peanuts".
   if (order) {
-    const kitchenNote = order.customer_note || order.notes;
-    if (kitchenNote) {
-      ops.push({ op: 'bold', v: true }, { op: 'size', v: 'b' },
-               { op: 'text', v: '** ' + String(kitchenNote).toUpperCase() + ' **' },
-               { op: 'size', v: 'n' }, { op: 'bold', v: false });
-    }
+    if (order.customer_name)    ops.push({ op: 'text', v: String(order.customer_name) });
+    if (order.customer_phone)   ops.push({ op: 'text', v: 'Tel: ' + String(order.customer_phone) });
+    if (order.delivery_address) ops.push({ op: 'text', v: String(order.delivery_address) });
+    const note = order.customer_note || order.notes;
+    if (note) ops.push({ op: 'bold', v: true }, { op: 'size', v: 'b' },
+                       { op: 'text', v: '** ' + String(note).toUpperCase() + ' **' },
+                       { op: 'size', v: 'n' }, { op: 'bold', v: false });
   }
   // 'krule' = a rule sized per printer (kitchen font is big, so the Sunmi needs a
   // shorter dash run than the network 32 or it wraps). See renderers below.
   ops.push({ op: 'align', v: 0 }, { op: 'krule', w: Math.min(kw, SUNMI_KITCHEN_WIDTH) });
 }
 
-// HH:MM in the DEVICE's local time — the Sunmi sits at the restaurant, so its
-// clock is the restaurant's timezone (correct even for a non-UK client).
-function fmtTime(t) {
-  try { return new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
-  catch { return String(t); }
-}
-
-function kitchenItemOps(ops, it, bilingual = true, sz = 'b') {
+function kitchenItemOps(ops, it, bilingual = true, sz = 'b', kw = 26) {
   // SEPOS-PRINT-FONT-001 — item + option/2nd-lang/note lines all print at the
   // configured kitchen size `sz` (default 'b' = today). Bold for emphasis.
-  ops.push({ op: 'bold', v: true }, { op: 'size', v: sz }, { op: 'text', v: `${it.quantity || 1} x ${it.name || it.item_name || ''}` }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
+  // SEPOS-TICKET-LAYOUT-001 (Korakot, 28 Aug) — option choices join the dish
+  // line ("1 x Pad Thai — Beef") when the whole line fits the printer's char
+  // width for this size (kw); overflow keeps its own line. item_note (allergy)
+  // ALWAYS keeps its own bold line.
+  const qtyName = `${it.quantity || 1} x ${it.name || it.item_name || ''}`;
+  const merged = it.notes ? `${qtyName} — ${it.notes}` : qtyName;
+  const inline = it.notes && merged.length <= kw;
+  ops.push({ op: 'bold', v: true }, { op: 'size', v: sz }, { op: 'text', v: inline ? merged : qtyName }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
   if (bilingual && it.name_alt)  ops.push({ op: 'size', v: sz }, { op: 'text', v: '  ' + it.name_alt }, { op: 'size', v: 'n' });
   if (it.item_note) ops.push({ op: 'bold', v: true }, { op: 'size', v: sz }, { op: 'text', v: '  ** ' + it.item_note + ' **' }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
-  if (it.notes)     ops.push({ op: 'size', v: sz }, { op: 'text', v: '  ' + it.notes }, { op: 'size', v: 'n' });
+  if (it.notes && !inline) ops.push({ op: 'size', v: sz }, { op: 'text', v: '  ' + it.notes }, { op: 'size', v: 'n' });
 }
 
 // ── Kitchen / bar / fire-notice layout → ops ──────────────────────────────────
@@ -133,7 +118,7 @@ export function buildKitchenOps(native) {
   const sentBy = ((items || []).find(i => i && i.sent_by) || {}).sent_by || null; // SEPOS-SENTBY-001
   const ops = [];
   if (kind === 'fire-notice') {
-    headerOps(ops, order, 'FIRE', kw);
+    headerOps(ops, order, 'CALL', kw);   // SEPOS-WORDING-001 — 'CALL' not 'FIRE'
     ops.push({ op: 'feed', v: 1 }, { op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' },
              { op: 'text', v: COURSE[course] || ('COURSE ' + course) }, { op: 'size', v: 'n' }, { op: 'bold', v: false },
              { op: 'align', v: 0 }, { op: 'feed', v: 2 }, { op: 'cut' });
@@ -141,7 +126,7 @@ export function buildKitchenOps(native) {
   }
   if (kind === 'bar') {
     headerOps(ops, order, 'BAR', kw, sentBy);
-    for (const it of (items || []).filter(i => i && !i.voided)) kitchenItemOps(ops, it, bilingual, sz);
+    for (const it of (items || []).filter(i => i && !i.voided)) kitchenItemOps(ops, it, bilingual, sz, kw);
     ops.push({ op: 'feed', v: 2 }, { op: 'cut' });
     return ops;
   }
@@ -155,27 +140,10 @@ export function buildKitchenOps(native) {
     // and the next begins (matches the HTML/desktop ticket's rule between courses).
     if (idx > 0) ops.push({ op: 'krule', w: Math.min(kw, SUNMI_KITCHEN_WIDTH) });
     ops.push({ op: 'bold', v: true }, { op: 'text', v: COURSE[c] || ('COURSE ' + c) }, { op: 'bold', v: false });
-    for (const it of byCourse[c]) kitchenItemOps(ops, it, bilingual, sz);
+    for (const it of byCourse[c]) kitchenItemOps(ops, it, bilingual, sz, kw);
     ops.push({ op: 'feed', v: 1 });
   });
   ops.push({ op: 'feed', v: 1 }, { op: 'cut' });
-  return ops;
-}
-
-// ── 📢 Kitchen message ticket → ops (SEPOS-ANDROID-004) ──────────────────────
-// Built on-device so it prints on the built-in printer (UTF-8 → Thai messages
-// render). Mirrors the server's distinctive message ticket: MESSAGE header,
-// big table number, the text, who sent it.
-export function buildKitchenMessageOps({ table_number, customer_name, message, waiter_name } = {}) {
-  const ops = [];
-  ops.push({ op: 'feed', v: 4 });
-  ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: 'MESSAGE' }, { op: 'size', v: 'n' });
-  if (table_number != null && table_number !== '') ops.push({ op: 'size', v: 'h' }, { op: 'text', v: 'TABLE ' + table_number }, { op: 'size', v: 'n' });
-  else if (customer_name) ops.push({ op: 'size', v: 'b' }, { op: 'text', v: String(customer_name) }, { op: 'size', v: 'n' });
-  ops.push({ op: 'bold', v: false }, { op: 'align', v: 0 }, { op: 'krule', w: SUNMI_KITCHEN_WIDTH });
-  ops.push({ op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: String(message || '') }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
-  if (waiter_name) ops.push({ op: 'feed', v: 1 }, { op: 'text', v: 'from ' + waiter_name });
-  ops.push({ op: 'feed', v: 2 }, { op: 'cut' });
   return ops;
 }
 
@@ -284,7 +252,9 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
     }
   }
   ops.push({ op: 'rule' });
-  ops.push({ op: 'align', v: 1 }, { op: 'text', v: footer }, { op: 'text', v: 'ขอบคุณที่มาใช้บริการ' }, { op: 'align', v: 0 }, { op: 'feed', v: 2 }, { op: 'cut' });
+  // SEPOS-FOOTER-SIZE-001 — footer at the same size as TOTAL ('b'), and the
+  // hardcoded Thai thank-you removed; the venue's own footer is the message.
+  ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: footer }, { op: 'size', v: 'r' }, { op: 'bold', v: false }, { op: 'align', v: 0 }, { op: 'feed', v: 2 }, { op: 'cut' });
   // SEPOS-PRINT-FONT-001 — apply the receipt scale uniformly: the compact 'r'
   // body font → the scaled token, and rows/rules carry the matching (narrower)
   // width so a bigger font doesn't wrap. normal = no-op (rsz='r', rw=36).

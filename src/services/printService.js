@@ -1563,6 +1563,51 @@ async function printReportText(settings, lines) {
   return sendRaw(ip, port, buf, { printerName: name });
 }
 
+// SEPOS-ANDROID-RENDER-BUFFER-001 (Korakot, 10 Sep) — the native app (satellite /
+// host tablet) prints over the LAN by FETCHING an ESC/POS buffer from
+// /api/print/buffers/* and pushing it to the printer itself. Those endpoints
+// returned the CLASSIC built-in-printer-font text, while the server's own direct
+// print path renders a nice RASTER first (tryRenderedTicket / tryRenderedReceipt).
+// Net effect Korakot saw: the satellite's kitchen tickets printed blocky and broke
+// words mid-line ("Oy/ster"), the bill truncated ("...Jasmi") — all different from
+// the main till. These helpers return the SAME rendered raster the main till uses,
+// keeping the classic builder ONLY as the Thai/CJK + render-failure fallback, so
+// the native LAN print matches the main till.
+async function kitchenTicketBuffer(settings, order, items, opts, classicFallback) {
+  try {
+    const tr = require('./ticketRender');
+    if (!tr.hasUnrenderableText(order, items)) {
+      return await tr.kitchenTicketRaster(order, items, {
+        ...(opts || {}),
+        size: settings.kitchen_ticket_size,
+        bilingual: settings.kitchen_language === 'en_th',
+      });
+    }
+  } catch (e) { console.warn('[print] kitchen buffer raster failed — classic fallback:', e.message); }
+  return classicFallback();
+}
+
+async function receiptBuffer(settings, order, items, paymentDetails = {}) {
+  try {
+    const tr = require('./ticketRender');
+    const model = computeReceiptModel({ order, items, settings, paymentDetails });
+    if (!tr.hasUnrenderableText(order, items, [model.name, model.addr, model.footer])) {
+      const raster = await tr.receiptRaster(order, model);
+      return flatten([
+        CMD.INIT,
+        ...(model.isSettledReceipt ? [] : buildLogoBlock(settings)),
+        raster,
+        (settings.google_review_url && !model.isSettledReceipt) ? [
+          lf(), CMD.ALIGN_CENTER, qrCode(settings.google_review_url), lf(),
+          txt(String(settings.receipt_qr_caption || 'Scan to leave us a review').slice(0, 42)), lf(),
+        ] : [],
+        lf(3), CMD.CUT,
+      ]);
+    }
+  } catch (e) { console.warn('[print] receipt buffer raster failed — classic fallback:', e.message); }
+  return buildReceipt({ order, items, settings, paymentDetails });
+}
+
 module.exports = {
   printReceipt,
   openCashDrawer,         // SEPOS-DRAWER-001
@@ -1578,6 +1623,8 @@ module.exports = {
   buildReceipt,           // exported for mock-receipt test print
   computeReceiptModel,    // SEPOS-RECEIPT-FONT-001 — shared with ticketRender + previews
   buildTestPage,          // SEPOS-ANDROID-001 — buffer endpoints for the native app
+  kitchenTicketBuffer,    // SEPOS-ANDROID-RENDER-BUFFER-001 — rendered-raster buffer for the native LAN print
+  receiptBuffer,          // SEPOS-ANDROID-RENDER-BUFFER-001
   buildKitchenTicket,     // SEPOS-ANDROID-001
   buildFullKitchenTicket, // SEPOS-ANDROID-001
   buildFireNotice,        // SEPOS-ANDROID-001 — native fire-notice buffer

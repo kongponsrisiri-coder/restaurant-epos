@@ -185,7 +185,24 @@ async function dispatchPrint({ settings, serverFn, html, copies = 1, popupWin = 
     const route = native.kind === 'bar' ? 'bar' : 'kitchen';
     const ip   = settings?.[`printer_${route}_ip`]   || settings?.printer_receipt_ip;
     const port = settings?.[`printer_${route}_port`] || settings?.printer_receipt_port || 9100;
-    await nativeKitchenPrint({ native, copies, ip, port, target: printTarget(settings, route), settings });
+    const target = printTarget(settings, route);
+    // SEPOS-ANDROID-SERVERPRINT-001 (Korakot, 10 Sep) — "make the satellite work
+    // like the browser". When the till this device talks to can reach a NETWORK
+    // printer, ask IT to render + send (serverFn) — exactly what the browser does,
+    // using the server's nice rendered raster, so the satellite matches the main
+    // till with no server rebuild. Fall back to the on-device push only for a
+    // Sunmi built-in printer (server can't reach it) or if the server can't be
+    // reached / can't reach the printer (e.g. pointed at the cloud).
+    const sunmi = (target === 'builtin' || target === 'auto') ? await sunmiAvailable() : false;
+    if (!sunmi && ip && serverFn) {
+      try {
+        const r = await serverFn(undefined, copies);
+        if (r && r.success) return;
+        if (r && r.held) { console.warn('[kitchen-ticket] ticket HELD by the server — banner offers retry/redirect'); return; }
+        console.warn('[kitchen-ticket] server print did not succeed, on-device fallback:', r?.error || r?.reason);
+      } catch (e) { console.warn('[kitchen-ticket] server print error, on-device fallback:', e?.message || e); }
+    }
+    await nativeKitchenPrint({ native, copies, ip, port, target, settings });
     return;
   }
 

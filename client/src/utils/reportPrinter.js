@@ -70,10 +70,12 @@ export async function escPosPrint(lines, settings = {}) {
       const sunmiOk = (target === 'builtin' || target === 'auto') ? await sunmiAvailable() : false;
       if (sunmiOk) { await sunmiPrintOps(opsForSunmi(ops)); return { success: true }; }
       if ((target === 'network' || target === 'auto') && ip) {
-        // SEPOS-ANDROID-REPORT-BUFFER-001 — prefer the SERVER-built report bytes
-        // (buildReportText) so the satellite's report matches the main till exactly.
-        // The on-device reportLinesToOps layout is the fallback if the server can't
-        // be reached (offline / older backend).
+        // SEPOS-ANDROID-SERVERPRINT-001 — "like the browser": let the till render
+        // + SEND the report itself (serverPrintReportText). Matches the main till
+        // with the current app, no rebuild. If the server can't reach the printer
+        // (cloud) we PULL the server-built bytes (buildReportText) and push them;
+        // only if BOTH fail do we use the on-device layout.
+        try { const sr = await serverPrintReportText(lines); if (sr && sr.success) return { success: true }; } catch (_) { /* try buffer */ }
         let base64 = null;
         try { const r = await serverReportBuffer(lines); if (r && r.data) base64 = r.data; } catch (_) { /* fall back */ }
         if (!base64) base64 = renderOpsToBytes(ops, { thaiCp: settings.kitchen_thai_codepage });

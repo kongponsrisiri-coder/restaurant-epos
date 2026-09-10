@@ -5644,6 +5644,7 @@ app.post('/api/saleschat/message', widgetCors, async (req, res) => {
     }
     await pool.query(`INSERT INTO sales_chats (session_id, messages) VALUES ($1,$2)
       ON CONFLICT (session_id) DO UPDATE SET messages=$2, updated_at=NOW()`, [session_id, JSON.stringify(msgs)]);
+    if (!cur) leadAlert.notifyNewChat(session_id, 'website chat', text); // SEPOS-LEAD-ALERT-002 — ping on the first message of a new chat
     leadAlert.scan(session_id, 'website chat', text); // SEPOS-LEAD-ALERT-001 — fire-and-forget
     res.json({ reply, handoff: !!(cur && cur.handoff) });
   } catch (e) { console.error('[saleschat] message', e.message); res.status(500).json({ reply: 'Sorry — please try again in a moment.' }); }

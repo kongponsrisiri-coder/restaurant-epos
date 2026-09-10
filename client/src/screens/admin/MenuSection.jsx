@@ -418,6 +418,43 @@ export default function MenuSection() {
     setLocalItems(newItems); setDragIndex(null); setDragOverIndex(null); saveSortOrder(newItems);
   }
   function handleDragEnd() { setDragIndex(null); setDragOverIndex(null); }
+
+  // SEPOS-ARRANGE-TOUCH-002 (Korakot, 10 Sep) — REAL drag-to-reorder by FINGER,
+  // not just mouse. HTML5 draggable never fires on touch; pointer events do, so
+  // one path drags for touch AND mouse. Drag starts from a GRIP handle only
+  // (touch-action:none on the grip), so touching a row body still SCROLLS the
+  // list. document.elementFromPoint finds the row under the finger/cursor.
+  const pointerDragRef = useRef({ id: null });
+  function commitReorder(dragId, dropId) {
+    if (dragId == null || dropId == null || dragId === dropId) return;
+    const from = localItems.findIndex(i => i.id === dragId);
+    const to   = localItems.findIndex(i => i.id === dropId);
+    if (from < 0 || to < 0) return;
+    const newItems = [...localItems]; const [moved] = newItems.splice(from, 1); newItems.splice(to, 0, moved);
+    setLocalItems(newItems); saveSortOrder(newItems);
+  }
+  function rowIdAt(x, y) {
+    const el = document.elementFromPoint(x, y);
+    const row = el && el.closest ? el.closest('[data-reorder-id]') : null;
+    return row ? Number(row.getAttribute('data-reorder-id')) : null;
+  }
+  function startPointerDrag(e, item) {
+    e.preventDefault(); e.stopPropagation();
+    pointerDragRef.current = { id: item.id };
+    setDragIndex(item.id);
+    const onMove = (ev) => { if (ev.cancelable) ev.preventDefault(); setDragOverIndex(rowIdAt(ev.clientX, ev.clientY)); };
+    const onUp = (ev) => {
+      commitReorder(pointerDragRef.current.id, rowIdAt(ev.clientX, ev.clientY));
+      pointerDragRef.current = { id: null };
+      setDragIndex(null); setDragOverIndex(null);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+    };
+    document.addEventListener('pointermove', onMove, { passive: false });
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+  }
   // SEPOS-ARRANGE-TOUCH-001 — HTML5 drag never fires on a touchscreen till, so
   // the item reorder was mouse-only (categories + sub-cats already use ◀▶ tap).
   // ▲▼ swaps an item with its visible neighbour — touch + mouse, filter-safe.
@@ -732,9 +769,17 @@ export default function MenuSection() {
             const isDragging = dragIndex === item.id; const isOver = dragOverIndex === item.id;
             const upDownBtn = { width: 38, height: 26, borderRadius: 7, border: '1.5px solid #C9A84C', background: '#FBF4DF', color: '#9A7B1F', fontSize: 13, fontWeight: 800, cursor: 'pointer', lineHeight: 1, touchAction: 'manipulation' };
             return (
-              <div key={item.id} draggable onDragStart={e => handleDragStart(e, item)} onDragOver={e => handleDragOver(e, item)} onDrop={e => handleDrop(e, item)} onDragEnd={handleDragEnd}
-                style={{ background: 'white', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : '0 1px 4px rgba(0,0,0,0.08)', opacity: isDragging ? 0.5 : 1, border: isOver ? '2px solid #3b82f6' : '2px solid transparent', cursor: 'grab' }}>
-                {/* SEPOS-ARRANGE-TOUCH-001 — tap ▲▼ to reorder (works on the touchscreen; drag still works with a mouse) */}
+              <div key={item.id} data-reorder-id={item.id}
+                style={{ background: 'white', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : '0 1px 4px rgba(0,0,0,0.08)', opacity: isDragging ? 0.5 : 1, border: isOver ? '2px solid #3b82f6' : '2px solid transparent' }}>
+                {/* SEPOS-ARRANGE-TOUCH-002 — GRIP handle: press-and-drag by finger OR mouse to
+                    reorder (pointer events). Only the grip has touch-action:none, so touching the
+                    rest of the row still scrolls the list. ▲▼ buttons remain as the tap alternative. */}
+                <div onPointerDown={e => startPointerDrag(e, item)}
+                  title="Drag to reorder"
+                  style={{ flexShrink: 0, width: 30, alignSelf: 'stretch', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#b8b8b8', fontSize: 20, cursor: 'grab', touchAction: 'none', userSelect: 'none' }}>
+                  ⋮⋮
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }} onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
                   <button onClick={e => { e.stopPropagation(); moveItem(item, -1); }} disabled={di === 0} title="Move up" style={{ ...upDownBtn, opacity: di === 0 ? 0.3 : 1, cursor: di === 0 ? 'default' : 'pointer' }}>▲</button>
                   <button onClick={e => { e.stopPropagation(); moveItem(item, 1); }} disabled={di === displayItems.length - 1} title="Move down" style={{ ...upDownBtn, opacity: di === displayItems.length - 1 ? 0.3 : 1, cursor: di === displayItems.length - 1 ? 'default' : 'pointer' }}>▼</button>

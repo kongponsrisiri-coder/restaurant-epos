@@ -980,6 +980,27 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
     setArrangeItems(prev => { const a = [...prev]; const [m] = a.splice(arrangeDrag, 1); a.splice(dropIdx, 0, m); return a; });
     setArrangeDrag(null);
   };
+
+  // SEPOS-ARRANGE-TOUCH-002 (Korakot, 10 Sep) — arrange menu buttons by FINGER,
+  // not just mouse. HTML5 draggable never fires on touch; pointer events do. Uses
+  // a ref for the source index (no stale closure) and elementFromPoint to find the
+  // card under the finger/cursor. Only active in arrangeMode, so normal ordering
+  // taps + scroll are untouched.
+  const arrangeDragRef = useRef(null);
+  const startArrangeDrag = (e, gridIdx) => {
+    e.preventDefault(); e.stopPropagation();
+    arrangeDragRef.current = gridIdx; setArrangeDrag(gridIdx);
+    const idxAt = (x, y) => { const el = document.elementFromPoint(x, y); const c = el && el.closest ? el.closest('[data-arrange-idx]') : null; return c ? Number(c.getAttribute('data-arrange-idx')) : null; };
+    const onMove = (ev) => { if (ev.cancelable) ev.preventDefault(); };
+    const onUp = (ev) => {
+      const from = arrangeDragRef.current; const to = idxAt(ev.clientX, ev.clientY);
+      if (from != null && to != null && from !== to) setArrangeItems(prev => { const a = [...prev]; const [m] = a.splice(from, 1); a.splice(to, 0, m); return a; });
+      setArrangeDrag(null); arrangeDragRef.current = null;
+      document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); document.removeEventListener('pointercancel', onUp);
+    };
+    document.addEventListener('pointermove', onMove, { passive: false });
+    document.addEventListener('pointerup', onUp); document.addEventListener('pointercancel', onUp);
+  };
   // SEPOS-ARRANGE-TOUCH-001 — HTML5 drag-and-drop never fires on a touchscreen
   // (a till IS a touchscreen), so dragging to reorder was mouse-only. Tap ◀ / ▶
   // moves an item one slot — works on touch AND mouse (drag kept for desktop).
@@ -1440,12 +1461,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     const totalQty = inCart.reduce((s, c) => s + c.quantity, 0);
                     return (
                       <div key={item.id}
-                        draggable={arrangeMode}
+                        data-arrange-idx={gridIdx}
                         onClick={arrangeMode ? undefined : () => handleItemClick(item)}
-                        onDragStart={arrangeMode ? () => setArrangeDrag(gridIdx) : undefined}
-                        onDragOver={arrangeMode ? (e) => e.preventDefault() : undefined}
-                        onDrop={arrangeMode ? (e) => { e.preventDefault(); onArrangeDrop(gridIdx); } : undefined}
-                        style={{ background: item.color || '#fff', borderRadius: 12, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : (item.color ? item.color : '#E7E2D6')}`, padding: '8px 10px', cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 48, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
+                        onPointerDown={arrangeMode ? (e) => startArrangeDrag(e, gridIdx) : undefined}
+                        style={{ background: item.color || '#fff', borderRadius: 12, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : (item.color ? item.color : '#E7E2D6')}`, padding: '8px 10px', cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 48, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1, touchAction: arrangeMode ? 'none' : undefined }}>
                         {/* SEPOS-MENU-COMPACT-001 — no price on the card, half-height row layout */}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 14, fontWeight: 700, color: item.color ? textOn(item.color) : 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>

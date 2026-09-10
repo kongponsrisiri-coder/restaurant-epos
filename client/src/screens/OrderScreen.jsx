@@ -1499,7 +1499,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
           borderTop: isMobile ? '1px solid #eee' : 'none',
           display: isMobile && mobileTab !== 'order' ? 'none' : 'flex',
           flexDirection: 'column',
-          flexShrink: isMobile ? undefined : 0
+          flexShrink: isMobile ? undefined : 0,
+          // SEPOS-ANDROID-ORDER-MOBILE-001 (Korakot, 10 Sep) — on a phone the bottom
+          // section (discount/deposit/subtotal/total/send/PAY) is too tall to pin, so
+          // the "View bill & pay" button fell off behind the tab bar. On mobile the
+          // whole panel scrolls as one unit instead (items area natural height below),
+          // so pay is always reachable. Tablet/desktop layout is untouched.
+          ...(isMobile ? { minHeight: 0, overflowY: 'auto' } : {})
         }}>
 
           {/* Order Summary Header
@@ -1556,11 +1562,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
 
           {/* Scrollable order items */}
           <div style={{
-            flex: 1,
-            overflowY: 'auto',
+            // SEPOS-ANDROID-ORDER-MOBILE-001 — on mobile the PANEL scrolls (above), so
+            // the items area is natural height and doesn't scroll on its own; on
+            // tablet/desktop it stays the flex:1 scroll region as before.
+            flex: isMobile ? 'none' : 1,
+            overflowY: isMobile ? 'visible' : 'auto',
             padding: '12px 16px',
-            // Same fixed-tab-bar offset as the menu side on mobile.
-            paddingBottom: isMobile ? 'calc(58px + env(safe-area-inset-bottom, 0px) + 12px)' : '12px'
+            paddingBottom: '12px'
           }}>
 
             {/* SEPOS-RESEND-002/003 — whole-order / tick-to-choose resend. Shows
@@ -1860,7 +1868,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
           <div style={{
             padding: '14px 16px',
             paddingBottom: isMobile ? 'calc(58px + env(safe-area-inset-bottom, 0px) + 14px)' : '14px',
-            borderTop: '1px solid #eee', flexShrink: 0
+            borderTop: '1px solid #eee',
+            // SEPOS-ANDROID-ORDER-MOBILE-001 — natural height so it flows inside the
+            // scrolling panel on mobile (was flexShrink:0 pinned, which clipped pay).
+            flexShrink: isMobile ? undefined : 0
           }}>
             {/* SEPOS-QR-ORDER-001 — customer PAID at order time; staff must not
                 charge again. The bill closes itself when everything is served. */}

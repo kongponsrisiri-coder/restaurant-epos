@@ -1625,6 +1625,7 @@ module.exports = {
   buildTestPage,          // SEPOS-ANDROID-001 — buffer endpoints for the native app
   kitchenTicketBuffer,    // SEPOS-ANDROID-RENDER-BUFFER-001 — rendered-raster buffer for the native LAN print
   receiptBuffer,          // SEPOS-ANDROID-RENDER-BUFFER-001
+  buildReportText,        // SEPOS-ANDROID-REPORT-BUFFER-001 — Z/report buffer for the native LAN print
   buildKitchenTicket,     // SEPOS-ANDROID-001
   buildFullKitchenTicket, // SEPOS-ANDROID-001
   buildFireNotice,        // SEPOS-ANDROID-001 — native fire-notice buffer

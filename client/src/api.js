@@ -680,6 +680,8 @@ export const serverPrintReceipt   = (order_id, payment_details, printer_name, pr
 // SEPOS-REPORTS-001 — ESC/POS print for admin reports (Sales / Items /
 // Z / VAT / Bills). Takes a line DSL — see printService.buildReportText.
 export const serverPrintReportText = (lines) => post('/api/print/report-text', { lines });
+// SEPOS-ANDROID-REPORT-BUFFER-001 — native app fetches the SERVER-built report bytes (buildReportText) to push to its LAN printer, matching the main till.
+export const serverReportBuffer = (lines) => post('/api/print/buffers/report', { lines });
 export const serverPrintKitchen   = (order_id, items, course, printer_name, copies)   => post('/api/print/kitchen', { order_id, items, course, printer_name, copies });
 export const serverPrintBar           = (order_id, items, printer_name)         => post('/api/print/bar',          { order_id, items, printer_name });
 export const serverPrintKitchenFull   = (order_id, items, printer_name, copies)         => post('/api/print/kitchen-full', { order_id, items, printer_name, copies });

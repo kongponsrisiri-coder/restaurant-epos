@@ -12063,6 +12063,23 @@ app.post('/api/print/report-text', async (req, res) => {
   }
 });
 
+// SEPOS-ANDROID-REPORT-BUFFER-001 (Korakot, 10 Sep) — the native app printed the
+// Z/shift report ON-DEVICE with its own reportLinesToOps layout, so it looked
+// different from the main till (which builds it here via buildReportText). This
+// returns the SAME server-built report bytes for the native app to push to its
+// LAN printer, so the satellite's report matches the main till exactly.
+app.post('/api/print/buffers/report', async (req, res) => {
+  const { lines } = req.body || {};
+  if (!Array.isArray(lines) || lines.length === 0) return res.status(400).json({ ok: false, error: 'lines[] required' });
+  try {
+    const buf = printService.buildReportText({ lines });
+    res.json({ ok: true, data: Buffer.from(buf).toString('base64'), bytes: buf.length });
+  } catch (err) {
+    console.error('[print/buffers/report]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ── SEPOS-ANDROID-001 — ESC/POS buffers for the native Android app ──────────
 // The cloud can't reach a LAN printer, so the Android app PULLS the bytes and
 // sends them to the printer itself (native TCP plugin). Same builders as the

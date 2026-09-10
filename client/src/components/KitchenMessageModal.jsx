@@ -7,8 +7,6 @@
 import { useState, useEffect } from 'react';
 import { getKitchenTemplates, sendKitchenMessage, getKitchenMessageBuffer, getSettings } from '../api';
 import { isNativeApp, sendRawToPrinter } from '../native/printer';
-import { sunmiAvailable, sunmiPrintOps, printTarget } from '../native/sunmiPrinter';
-import { buildKitchenMessageOps, opsForSunmi } from '../native/escpos';
 
 // SEPOS-KITCHEN-MSG-002 — when `onSaveNote` is passed (order context), the modal
 // ATTACHES the message to the order so it prints at the bottom of that order's
@@ -64,15 +62,9 @@ export default function KitchenMessageModal({ orderId, tableNumber, customerName
       if (isNativeApp()) {
         try {
           const s = await getSettings();
-          // SEPOS-ANDROID-004 — built-in first (Sunmi with no network printer:
-          // Chart Thai's exact setup), else the configured network printer.
-          const target = printTarget(s, 'kitchen');
-          const sunmiOk = (target === 'builtin' || target === 'auto') ? await sunmiAvailable() : false;
           const ip   = s?.printer_kitchen_ip   || s?.printer_receipt_ip;
           const port = s?.printer_kitchen_port || s?.printer_receipt_port || 9100;
-          if (sunmiOk) {
-            await sunmiPrintOps(opsForSunmi(buildKitchenMessageOps(payload)));
-          } else if (ip) {
+          if (ip) {
             const buf = await getKitchenMessageBuffer(payload);
             if (buf?.data) await sendRawToPrinter(ip, port, buf.data);
           }

@@ -71,6 +71,18 @@ async function _nativePrintReceipt({ order, items, settings, paymentDetails }) {
   else if ((target === 'network' || target === 'auto') && ip) dest = 'network';
   if (!dest) throw new Error('no printer for target ' + target);
 
+  // SEPOS-ANDROID-SERVERPRINT-001 (Korakot, 10 Sep) — "make the satellite work
+  // like the browser". For a NETWORK receipt printer the till can reach, ask IT
+  // to render + send (serverPrintReceipt) — the browser's path, and it uses the
+  // server's nice rendered raster (logo + exact format). Only fall through to the
+  // on-device push if the server can't do it (unreachable / can't reach printer).
+  if (dest === 'network') {
+    try {
+      const r = await serverPrintReceipt(order.id, paymentDetails);
+      if (r && r.success) return;
+    } catch (_) { /* server unreachable → on-device fallback below */ }
+  }
+
   const ops = buildReceiptOps({ order, items, settings, paymentDetails });
   if (dest === 'builtin') { await sunmiPrintOps(opsForSunmi(ops)); return; } // UTF-8 + logo via printBitmap
 

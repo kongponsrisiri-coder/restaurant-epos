@@ -4,6 +4,7 @@ import { getRestaurant, getLicenseState, syncLocalOrders, getSettings, TENANT_MI
 import { startHost } from './native/nodeHost';        // SEPOS host spike — no-op unless host mode
 import { applyBrandTheme } from './theme'; // SEPOS-BRAND-001 — per-client theme
 import { backupSalesToDevice } from './native/salesBackup'; // SEPOS-ANDROID-003
+import { checkForUpdate, startUpdate } from './native/appUpdate'; // SEPOS-ANDROID-AUTOUPDATE-001
 import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './utils/plan';
 import UpgradeLocked from './components/UpgradeLocked';
 import LoginScreen from './screens/LoginScreen';
@@ -124,6 +125,17 @@ export default function App() {
     if (window.siamepos && window.siamepos.onUpdateReady) {
       window.siamepos.onUpdateReady(() => setUpdateReady(true));
     }
+  }, []);
+
+  // SEPOS-ANDROID-AUTOUPDATE-001 — Android satellite one-tap update: check the
+  // releases channel on launch. No-op on web / desktop / iOS (checkForUpdate
+  // returns null unless this is the native Android app).
+  const [apkUpdate, setApkUpdate]     = useState(null);
+  const [apkUpdating, setApkUpdating] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    checkForUpdate().then(u => { if (alive && u) setApkUpdate(u); }).catch(() => {});
+    return () => { alive = false; };
   }, []);
 
   // SEPOS-OPENDAY-001 — 'idle' | 'checking' | 'ok' | 'needed'. Drives the
@@ -836,6 +848,28 @@ export default function App() {
             Restart now
           </button>
           <button onClick={() => setUpdateReady(false)} aria-label="Dismiss"
+            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 18, cursor: 'pointer', padding: '0 2px' }}>×</button>
+        </div>
+      )}
+      {apkUpdate && (
+        <div style={{
+          position: 'fixed', bottom: 16, left: 16, right: 16, maxWidth: 460, margin: '0 auto',
+          zIndex: 100001, background: 'var(--brand-primary,#0D1B3E)', color: 'white', borderRadius: 12,
+          padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+        }}>
+          <div style={{ flex: 1, fontSize: 14, lineHeight: 1.4 }}>
+            <strong>✨ Update available</strong><br />
+            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>
+              {apkUpdating ? 'Downloading… tap Update in the installer when it opens.' : `A newer version (v${apkUpdate.version}) is ready to install.`}
+            </span>
+          </div>
+          <button disabled={apkUpdating}
+            onClick={async () => { setApkUpdating(true); try { await startUpdate(apkUpdate.url); } catch (e) { setApkUpdating(false); window.alert('Update failed — please reinstall from siamepos.co.uk/app'); } }}
+            style={{ background: 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary,#0D1B3E)', border: 'none', borderRadius: 8, padding: '10px 16px', fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap', opacity: apkUpdating ? 0.7 : 1 }}>
+            {apkUpdating ? 'Updating…' : 'Update now'}
+          </button>
+          <button onClick={() => setApkUpdate(null)} aria-label="Dismiss"
             style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 18, cursor: 'pointer', padding: '0 2px' }}>×</button>
         </div>
       )}

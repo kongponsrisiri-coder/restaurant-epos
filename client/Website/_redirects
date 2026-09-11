@@ -11,3 +11,4 @@
 # card / QR never changes between versions. The PAGE states the exact version.
 /app      /app.html   200
 /tablet   /app.html   301
+/host     /host.html  200

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install the SiamEPOS tablet app — SiamEPOS</title>
+<meta name="description" content="Install the SiamEPOS tablet app on an Android tablet so it works as an extra till alongside your main till.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="favicon.svg">
+<style>
+  :root { --navy:#0D1B3E; --gold:#C9A84C; --ink:#1a1a2e; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--navy);color:#fff;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.6}
+  body.thai .lang-en{display:none}
+  body:not(.thai) .lang-th{display:none}
+  .wrap{max-width:640px;margin:0 auto;padding:28px 20px 64px}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:26px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;letter-spacing:.2px}
+  .brand span.e{color:var(--gold)}
+  .lang-toggle{background:transparent;border:1px solid rgba(201,168,76,.5);color:var(--gold);border-radius:8px;padding:5px 12px;font-size:13px;font-weight:700;cursor:pointer}
+  h1{font-size:27px;line-height:1.25;margin:0 0 10px;font-weight:800}
+  .sub{color:rgba(255,255,255,.72);font-size:15.5px;margin:0 0 26px}
+  .card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:20px;margin-bottom:18px}
+  .ver{display:inline-block;background:rgba(201,168,76,.14);border:1px solid rgba(201,168,76,.4);color:var(--gold);
+       border-radius:999px;padding:4px 13px;font-size:13px;font-weight:800;letter-spacing:.4px;margin-bottom:14px}
+  .dl{display:block;text-align:center;background:var(--gold);color:var(--navy);text-decoration:none;
+      border-radius:12px;padding:17px 20px;font-size:17.5px;font-weight:800;margin:6px 0 10px}
+  .dl small{display:block;font-weight:600;font-size:12.5px;opacity:.75;margin-top:3px}
+  ol{margin:0;padding-left:22px}
+  ol li{margin-bottom:13px}
+  .note{background:rgba(201,168,76,.10);border:1px solid rgba(201,168,76,.32);border-radius:10px;padding:13px 15px;font-size:14px;color:#f0e6cf}
+  .warn{background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.35);border-radius:10px;padding:13px 15px;font-size:14px;color:#fecaca}
+  h2{font-size:17px;margin:0 0 12px;font-weight:800;color:var(--gold)}
+  .foot{color:rgba(255,255,255,.45);font-size:13px;text-align:center;margin-top:30px}
+  .foot a{color:rgba(201,168,76,.85)}
+  b{color:#fff}
+</style>
+</head>
+<body>
+<script>(function(){var s=null;try{s=localStorage.getItem('siamLang')}catch(e){}var th=(s==='th')||(s===null&&/^th/i.test((navigator.language||navigator.userLanguage||'')));if(th){document.body.classList.add('thai');document.documentElement.lang='th';}})();</script>
+
+<div class="wrap">
+
+  <div class="top">
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 104 104" aria-hidden="true">
+        <circle cx="52" cy="52" r="44" fill="none" stroke="#C9A84C" stroke-width="1.5"/>
+        <circle cx="52" cy="52" r="38" fill="none" stroke="#C9A84C" stroke-width="0.5" opacity="0.28"/>
+        <g transform="translate(52,52)">
+          <path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C"/>
+          <path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/>
+          <path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/>
+          <path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/>
+          <path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/>
+          <circle cx="0" cy="0" r="8" fill="#0D1B3E"/><circle cx="0" cy="0" r="4.5" fill="#C9A84C"/>
+        </g>
+      </svg>
+      <div>Siam<span class="e">EPOS</span></div>
+    </div>
+    <button class="lang-toggle" id="lt">ไทย</button>
+  </div>
+
+  <span class="ver">v1.5.52</span>
+  <h1><span class="lang-en">Install the SiamEPOS tablet app</span><span class="lang-th">ติดตั้งแอป SiamEPOS บนแท็บเล็ต</span></h1>
+  <p class="sub">
+    <span class="lang-en">This turns an Android tablet into an extra till that works alongside your main till — full ordering, no web browser.</span>
+    <span class="lang-th">แอปนี้จะเปลี่ยนแท็บเล็ต Android ให้เป็นเครื่องสั่งอาหารเพิ่มอีกเครื่อง ทำงานร่วมกับเครื่องหลักของร้าน สั่งอาหารได้เต็มรูปแบบ ไม่ต้องเปิดผ่านเบราว์เซอร์</span>
+  </p>
+
+  <div class="card">
+    <a class="dl" id="dl" href="https://github.com/kongponsrisiri-coder/siamepos-releases/releases/download/tablet-v1.5.52/SiamEPOS-Satellite-v1.5.52.apk" download>
+      <span class="lang-en">Download for Android</span><span class="lang-th">ดาวน์โหลดสำหรับ Android</span>
+      <small>SiamEPOS-Satellite-v1.5.52.apk · 24 MB</small>
+    </a>
+    <div class="note">
+      <span class="lang-en"><b>Open this page on the tablet itself</b> — not on a computer. The file installs onto the device you download it on.</span>
+      <span class="lang-th"><b>เปิดหน้านี้บนแท็บเล็ตเครื่องที่จะใช้งาน</b> ไม่ใช่บนคอมพิวเตอร์ เพราะไฟล์จะติดตั้งลงบนเครื่องที่ดาวน์โหลดเท่านั้น</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="lang-en">How to install</span><span class="lang-th">วิธีติดตั้ง</span></h2>
+    <ol>
+      <li>
+        <span class="lang-en">Tap <b>Download for Android</b> above, then open the downloaded file.</span>
+        <span class="lang-th">กด <b>ดาวน์โหลดสำหรับ Android</b> ด้านบน แล้วเปิดไฟล์ที่ดาวน์โหลดมา</span>
+      </li>
+      <li>
+        <span class="lang-en">Android will ask permission to install from your browser. Tap <b>Settings</b> and switch on <b>Allow from this source</b>, then go back. You only do this once on each tablet.</span>
+        <span class="lang-th">ระบบจะขออนุญาตติดตั้งจากเบราว์เซอร์ ให้กด <b>การตั้งค่า</b> แล้วเปิด <b>อนุญาตจากแหล่งนี้</b> จากนั้นย้อนกลับ ทำครั้งเดียวต่อแท็บเล็ตหนึ่งเครื่อง</span>
+      </li>
+      <li>
+        <span class="lang-en">Tap <b>Install</b>, then open the app and scan the QR code on your till (<b>Admin → Settings</b>).</span>
+        <span class="lang-th">กด <b>ติดตั้ง</b> จากนั้นเปิดแอปแล้วสแกน QR code ที่แสดงบนเครื่องหลัก (<b>Admin → Settings</b>)</span>
+      </li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <div class="warn">
+      <span class="lang-en"><b>You may see a security warning.</b> Because this app is installed directly rather than from the Play Store, Android may warn about an unknown app or offer to scan it. This is normal — choose to continue or install anyway. The app is signed by SiamEPOS.</span>
+      <span class="lang-th"><b>อาจมีคำเตือนด้านความปลอดภัย</b> เนื่องจากติดตั้งโดยตรง ไม่ได้ผ่าน Play Store ระบบ Android อาจแจ้งเตือนว่าไม่รู้จักแอปนี้ หรือขอสแกนไฟล์ก่อน ถือเป็นเรื่องปกติ ให้เลือกดำเนินการต่อหรือติดตั้งต่อไป แอปนี้มีลายเซ็นรับรองจาก SiamEPOS</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="lang-en">Before you start</span><span class="lang-th">ก่อนเริ่มใช้งาน</span></h2>
+    <ul style="margin:0;padding-left:22px">
+      <li><span class="lang-en">Your main till must be <b>switched on and running</b> — this app connects to it.</span>
+          <span class="lang-th">เครื่องหลักของร้านต้อง <b>เปิดและทำงานอยู่</b> เพราะแอปนี้เชื่อมต่อไปที่เครื่องหลัก</span></li>
+      <li><span class="lang-en">The tablet must be on the <b>same Wi-Fi</b> as the till.</span>
+          <span class="lang-th">แท็บเล็ตต้องเชื่อมต่อ <b>Wi-Fi วงเดียวกัน</b> กับเครื่องหลัก</span></li>
+      <li><span class="lang-en">Android 7 or newer.</span>
+          <span class="lang-th">รองรับ Android 7 ขึ้นไป</span></li>
+    </ul>
+  </div>
+
+  <p class="foot">
+    <span class="lang-en">Need a hand? Email <a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></span>
+    <span class="lang-th">ต้องการความช่วยเหลือ ติดต่อ <a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></span>
+  </p>
+</div>
+
+<script>
+  document.getElementById('lt').addEventListener('click', function () {
+    var th = document.body.classList.toggle('thai');
+    document.documentElement.lang = th ? 'th' : 'en';
+    this.textContent = th ? 'EN' : 'ไทย';
+    try { localStorage.setItem('siamLang', th ? 'th' : 'en'); } catch (e) {}
+  });
+  (function(){ var b=document.getElementById('lt'); if(document.body.classList.contains('thai')) b.textContent='EN'; })();
+</script>
+</body>
+</html>

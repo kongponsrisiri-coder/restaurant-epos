@@ -743,6 +743,12 @@ function BarCategoryManager() {
 
 
 export default function SettingsSection() {
+  // SEPOS-DEVICE-AUTH-001 — confirm before ARMING the device gate (Till Security card).
+  // NB: must live HERE, in SettingsSection — the card and its modal both render in this
+  // component. A first pass declared it in KitchenTemplatesCard higher up the file; the
+  // build passed and the Settings page died at runtime with 'confirmDeviceAuth is not
+  // defined'. Caught by loading the page, not by compiling it.
+  const [confirmDeviceAuth, setConfirmDeviceAuth] = useState(false);
   const [settings, setSettings] = useState({
     company_name:            '',
     company_address:         '',
@@ -759,6 +765,7 @@ export default function SettingsSection() {
     login_pin_only:          '0',   // SEPOS-PINONLY-001 — skip the name grid; PIN identifies the staff
     kitchen_bar_as_waiters:  '1',   // SEPOS-KB-WAITER-001 — DEFAULT ON; KDS venues (Fern) untick
     till_idle_minutes:       '2',   // SEPOS-TILL-LOCK-001 — auto sign-out after idle ('0' = off)
+    require_device_auth:     '0',   // SEPOS-DEVICE-AUTH-001 — email-authorise each device before PIN sign-in
     nav_show_reservations:   '1',   // SEPOS-NAV-HIDE-001 — navbar tab visibility, default all shown
     nav_show_kitchen:        '1',
     nav_show_bar:            '1',
@@ -1395,7 +1402,99 @@ export default function SettingsSection() {
           Staff sign back in with their PIN in seconds. Unsent basket items are kept on the table.
           Kitchen and Bar displays are never signed out automatically.
         </div>
+
+        {/* ── SEPOS-DEVICE-AUTH-001 — the switch for the email-authorised device gate.
+            The server side shipped in v1.9.41 but had NO user interface at all: the
+            only way to set it was an authenticated API call with the tenant's sync
+            secret, which meant nobody could see whether it was on and nobody could
+            turn it OFF in a hurry. That is the wrong shape for a switch that blocks
+            every sign-in, so it gets a visible state and a one-click off.
+
+            Turning it ON is confirmed, deliberately: the moment it saves, EVERY
+            device at this venue is locked out until someone standing at that device
+            completes the email round-trip. Turning it OFF needs no confirmation —
+            the safe direction should never be obstructed. */}
+        <div style={{ marginTop:18, paddingTop:16, borderTop:'1px solid #eee' }}>
+          <label style={{ display:'flex', alignItems:'flex-start', gap:10, fontSize:15, fontWeight:600, cursor:'pointer' }}>
+            <input
+              type="checkbox"
+              style={{ marginTop:3 }}
+              checked={settings.require_device_auth === '1'}
+              onChange={(e) => {
+                // Switching OFF is the safe direction — never obstruct it.
+                if (!e.target.checked) { setSettings({ ...settings, require_device_auth: '0' }); return; }
+                setConfirmDeviceAuth(true);   // switching ON asks first (modal below)
+              }}
+            />
+            <span>
+              Require email authorisation for new devices
+              <span style={{ display:'block', fontSize:12, color:'#888', fontWeight:400, marginTop:4, lineHeight:1.5 }}>
+                Stops anyone who finds this till&rsquo;s web address from reaching the PIN pad at all.
+                Each device is authorised once by email (owner, manager or supervisor) and stays
+                trusted for 180 days. Applies to browser tills and the tablet app — desktop tills
+                on this venue&rsquo;s own computer are never affected.
+              </span>
+              {settings.require_device_auth === '1' && (
+                <span style={{ display:'block', marginTop:8, fontSize:12.5, lineHeight:1.5,
+                  background:'#FEF3C7', border:'1px solid #FCD34D', color:'#92400E',
+                  borderRadius:8, padding:'8px 10px', fontWeight:600 }}>
+                  ⚠ On. A device that clears its browser data — or has not signed in for 180 days —
+                  will need authorising again. Untick and Save to switch it off immediately.
+                </span>
+              )}
+            </span>
+          </label>
+        </div>
       </div>
+
+      {/* SEPOS-DEVICE-AUTH-001 — arming confirmation. A React modal rather than
+          window.confirm: confirm() is a native dialog that renders inconsistently
+          inside the Android WebView and blocks the whole UI thread, and this needs
+          to spell out a consequence too long for a one-line browser prompt. */}
+      {confirmDeviceAuth && (
+        <div
+          data-testid="device-auth-confirm"
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:10000,
+            display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={() => setConfirmDeviceAuth(false)}
+        >
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ background:'#fff', borderRadius:16, maxWidth:520, width:'100%',
+              padding:'26px 26px 22px', boxShadow:'0 20px 60px rgba(0,0,0,0.35)' }}>
+            <h3 style={{ margin:'0 0 12px', fontSize:19, fontWeight:800, color:'#0D1B3E' }}>
+              Require email authorisation on every device?
+            </h3>
+            <p style={{ margin:'0 0 12px', fontSize:14.5, lineHeight:1.6, color:'#334155' }}>
+              When you <b>Save</b>, nobody at this venue can sign in with a PIN until each device
+              has been authorised once by email.
+            </p>
+            <p style={{ margin:'0 0 12px', fontSize:14.5, lineHeight:1.6, color:'#334155' }}>
+              On every till and tablet, someone must enter an owner, manager or supervisor email,
+              then open the emailed link <b>on that device</b> and tap Authorise. Each device then
+              stays trusted for 180 days.
+            </p>
+            <div style={{ background:'#FEF2F2', border:'1px solid #FCA5A5', color:'#991B1B',
+              borderRadius:10, padding:'10px 13px', fontSize:13.5, fontWeight:700, lineHeight:1.5,
+              marginBottom:20 }}>
+              Do not switch this on during service — staff will be locked out mid-shift.
+            </div>
+            <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+              <button data-testid="device-auth-cancel"
+                onClick={() => setConfirmDeviceAuth(false)}
+                style={{ padding:'11px 20px', borderRadius:10, border:'1px solid #ddd',
+                  background:'#fff', fontSize:14.5, fontWeight:700, cursor:'pointer', color:'#334155' }}>
+                Cancel
+              </button>
+              <button data-testid="device-auth-arm"
+                onClick={() => { setSettings({ ...settings, require_device_auth: '1' }); setConfirmDeviceAuth(false); }}
+                style={{ padding:'11px 20px', borderRadius:10, border:'none', background:'#B91C1C',
+                  color:'#fff', fontSize:14.5, fontWeight:800, cursor:'pointer' }}>
+                Turn it on
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── SEPOS-NAV-HIDE-001 — Navigation tabs ── */}
       <div style={cardStyle}>

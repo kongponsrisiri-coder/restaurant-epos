@@ -348,6 +348,9 @@ async function initDB() {
     // once-only alert stamp (SMS to Korakot).
     await pool.query(`ALTER TABLE sales_chats ADD COLUMN IF NOT EXISTS lead_contact TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE sales_chats ADD COLUMN IF NOT EXISTS lead_notified_at TIMESTAMP`).catch(() => {});
+    // SEPOS-LEAD-ALERT-002 — once-only stamp for the "new website chat started"
+    // SMS (fires on the first message, before any contact is left).
+    await pool.query(`ALTER TABLE sales_chats ADD COLUMN IF NOT EXISTS chat_notified_at TIMESTAMP`).catch(() => {});
 
     // SEPOS-BIRTHDAY-001 — per-customer extras. The CRM itself stays a
     // DERIVED view (reservations + takeaway orders, keyed by contact_key =

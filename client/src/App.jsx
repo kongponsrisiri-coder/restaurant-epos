@@ -1,15 +1,17 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
 import { getRestaurant, getLicenseState, syncLocalOrders, getSettings, TENANT_MISCONFIGURED, getCurrentSession, isHostMode, manualOpenDrawer } from './api';
 import { startHost } from './native/nodeHost';        // SEPOS host spike — no-op unless host mode
 import { applyBrandTheme } from './theme'; // SEPOS-BRAND-001 — per-client theme
 import { backupSalesToDevice } from './native/salesBackup'; // SEPOS-ANDROID-003
+import { checkForUpdate, startUpdate } from './native/appUpdate'; // SEPOS-ANDROID-AUTOUPDATE-001
 import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './utils/plan';
 import UpgradeLocked from './components/UpgradeLocked';
 import LoginScreen from './screens/LoginScreen';
 import SetupScreen from './screens/SetupScreen';          // SEPOS-ANDROID-001
 import TillUnreachableBanner from './components/TillUnreachableBanner';  // SEPOS-ANDROID-RESCAN-001
 import { needsTenantSetup, probeTenant, getTenantUrl } from './native/tenant';  // SEPOS-ANDROID-001 / -RECONNECT-001
+import { isNativeApp } from './native/printer'; // SEPOS-RECONNECT-002 — gate the re-probe to the native app
 import OnlineOrderPrinter from './native/OnlineOrderPrinter'; // SEPOS-ANDROID-001
 import TableMapScreen from './screens/TableMapScreen';
 import OrderScreen from './screens/OrderScreen';
@@ -125,6 +127,17 @@ export default function App() {
     if (window.siamepos && window.siamepos.onUpdateReady) {
       window.siamepos.onUpdateReady(() => setUpdateReady(true));
     }
+  }, []);
+
+  // SEPOS-ANDROID-AUTOUPDATE-001 — Android satellite one-tap update: check the
+  // releases channel on launch. No-op on web / desktop / iOS (checkForUpdate
+  // returns null unless this is the native Android app).
+  const [apkUpdate, setApkUpdate]     = useState(null);
+  const [apkUpdating, setApkUpdating] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    checkForUpdate().then(u => { if (alive && u) setApkUpdate(u); }).catch(() => {});
+    return () => { alive = false; };
   }, []);
 
   // SEPOS-OPENDAY-001 — 'idle' | 'checking' | 'ok' | 'needed'. Drives the
@@ -248,6 +261,33 @@ export default function App() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // SEPOS-RECONNECT-002 — the mount probe above runs ONCE. Re-probe the host when
+  // the app returns to the foreground (iOS/Android suspend it and the host's DHCP
+  // IP can move while it is backgrounded) and when the server monitor flips offline
+  // mid-service, so the "Can't reach the till / scan QR" screen appears on its own
+  // rather than the app silently firing at a dead IP until a manual reload. The 3 s
+  // re-check means a brief wifi blip never bounces staff mid-order; if the host
+  // comes back the reconnect screen clears itself.
+  const reprobingRef = useRef(false);
+  const reprobeHost = useCallback(async () => {
+    if (!isNativeApp() || needsTenantSetup() || reprobingRef.current) return;
+    reprobingRef.current = true;
+    try {
+      if (await probeTenant()) { setHostUnreachable(false); return; }
+      await new Promise((r) => setTimeout(r, 3000));
+      if (await probeTenant()) { setHostUnreachable(false); return; }
+      setHostUnreachable(true);
+    } finally { reprobingRef.current = false; }
+  }, []);
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === 'visible') reprobeHost(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [reprobeHost]);
+  useEffect(() => {
+    if (serverStatus === 'offline') reprobeHost();
+  }, [serverStatus, reprobeHost]);
   useEffect(() => {
     let alive = true;
     const poll = async () => {
@@ -851,6 +891,28 @@ export default function App() {
             Restart now
           </button>
           <button onClick={() => setUpdateReady(false)} aria-label="Dismiss"
+            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 18, cursor: 'pointer', padding: '0 2px' }}>×</button>
+        </div>
+      )}
+      {apkUpdate && (
+        <div style={{
+          position: 'fixed', bottom: 16, left: 16, right: 16, maxWidth: 460, margin: '0 auto',
+          zIndex: 100001, background: 'var(--brand-primary,#0D1B3E)', color: 'white', borderRadius: 12,
+          padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+        }}>
+          <div style={{ flex: 1, fontSize: 14, lineHeight: 1.4 }}>
+            <strong>✨ Update available</strong><br />
+            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>
+              {apkUpdating ? 'Downloading… tap Update in the installer when it opens.' : `A newer version (v${apkUpdate.version}) is ready to install.`}
+            </span>
+          </div>
+          <button disabled={apkUpdating}
+            onClick={async () => { setApkUpdating(true); try { await startUpdate(apkUpdate.url); } catch (e) { setApkUpdating(false); window.alert('Update failed — please reinstall from siamepos.co.uk/app'); } }}
+            style={{ background: 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary,#0D1B3E)', border: 'none', borderRadius: 8, padding: '10px 16px', fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap', opacity: apkUpdating ? 0.7 : 1 }}>
+            {apkUpdating ? 'Updating…' : 'Update now'}
+          </button>
+          <button onClick={() => setApkUpdate(null)} aria-label="Dismiss"
             style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 18, cursor: 'pointer', padding: '0 2px' }}>×</button>
         </div>
       )}

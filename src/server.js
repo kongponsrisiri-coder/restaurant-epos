@@ -5644,6 +5644,7 @@ app.post('/api/saleschat/message', widgetCors, async (req, res) => {
     }
     await pool.query(`INSERT INTO sales_chats (session_id, messages) VALUES ($1,$2)
       ON CONFLICT (session_id) DO UPDATE SET messages=$2, updated_at=NOW()`, [session_id, JSON.stringify(msgs)]);
+    if (!cur) leadAlert.notifyNewChat(session_id, 'website chat', text); // SEPOS-LEAD-ALERT-002 — ping on the first message of a new chat
     leadAlert.scan(session_id, 'website chat', text); // SEPOS-LEAD-ALERT-001 — fire-and-forget
     res.json({ reply, handoff: !!(cur && cur.handoff) });
   } catch (e) { console.error('[saleschat] message', e.message); res.status(500).json({ reply: 'Sorry — please try again in a moment.' }); }
@@ -12110,9 +12111,8 @@ app.post('/api/print/buffers/receipt', async (req, res) => {
       `SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt
        FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
        WHERE order_items.order_id = $1`, [order_id]);
-    const buf = printService.buildReceipt({
-      order: orderRes.rows[0], items: itemsRes.rows, settings, paymentDetails: payment_details || {},
-    });
+    // SEPOS-ANDROID-RENDER-BUFFER-001 — rendered raster receipt (matches the main till), classic fallback inside.
+    const buf = await printService.receiptBuffer(settings, orderRes.rows[0], itemsRes.rows, payment_details || {});
     res.json({ ok: true, data: Buffer.from(buf).toString('base64'), bytes: buf.length });
   } catch (err) {
     console.error('[print/buffers/receipt]', err.message);
@@ -12137,7 +12137,9 @@ app.post('/api/print/buffers/kitchen', async (req, res) => {
        WHERE order_items.order_id = $1`, [order_id]);
     const bilingual    = settings.kitchen_language === 'en_th';
     const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
-    const buf = printService.buildFullKitchenTicket({ order: orderRes.rows[0], items: itemsRes.rows, bilingual, thaiCodepage });
+    // SEPOS-ANDROID-RENDER-BUFFER-001 — rendered raster (matches the main till), classic only as fallback.
+    const buf = await printService.kitchenTicketBuffer(settings, orderRes.rows[0], itemsRes.rows, {},
+      () => printService.buildFullKitchenTicket({ order: orderRes.rows[0], items: itemsRes.rows, bilingual, thaiCodepage }));
     res.json({ ok: true, data: Buffer.from(buf).toString('base64'), bytes: buf.length });
   } catch (err) {
     console.error('[print/buffers/kitchen]', err.message);
@@ -12168,18 +12170,23 @@ app.post('/api/print/buffers/kitchen-ticket', async (req, res) => {
     const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
     let buf;
     switch (kind) {
+      // SEPOS-ANDROID-RENDER-BUFFER-001 — rendered raster (matches the main till), classic only on Thai/CJK or render failure.
       case 'full':
-        buf = printService.buildFullKitchenTicket({ order, items: list, bilingual, thaiCodepage });
+        buf = await printService.kitchenTicketBuffer(settings, order, list, {},
+          () => printService.buildFullKitchenTicket({ order, items: list, bilingual, thaiCodepage }));
         break;
       case 'bar':
-        buf = printService.buildKitchenTicket({ order, items: list, course: 4, bilingual, thaiCodepage });
+        buf = await printService.kitchenTicketBuffer(settings, order, list, { course: 'BAR' },
+          () => printService.buildKitchenTicket({ order, items: list, course: 4, bilingual, thaiCodepage }));
         break;
       case 'fire-notice':
+        // Fire notice is a large single-line alert — no rendered variant; classic is fine.
         buf = printService.buildFireNotice({ order, course: course || 1, bilingual });
         break;
       case 'course':
       default:
-        buf = printService.buildKitchenTicket({ order, items: list, course: course || 1, bilingual, thaiCodepage });
+        buf = await printService.kitchenTicketBuffer(settings, order, list, { course: course || 1 },
+          () => printService.buildKitchenTicket({ order, items: list, course: course || 1, bilingual, thaiCodepage }));
     }
     res.json({ ok: true, data: Buffer.from(buf).toString('base64'), bytes: buf.length });
   } catch (err) {

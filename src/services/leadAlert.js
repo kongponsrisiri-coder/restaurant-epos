@@ -53,4 +53,29 @@ async function scan(sessionId, channel, text) {
   }
 }
 
-module.exports = { scan, detectContact };
+// SEPOS-LEAD-ALERT-002 — text Korakot the moment ANY new website chat starts,
+// BEFORE the visitor leaves contact details, so a live thread can be taken over
+// quickly (Korakot 10 Sep: "someone chatted and I didn't notice"). One SMS per
+// session (chat_notified_at guards double-sends). Dormant without LEAD_ALERT_SMS_TO.
+async function notifyNewChat(sessionId, channel, text) {
+  try {
+    const to = process.env.LEAD_ALERT_SMS_TO;
+    if (!to) return;
+    // Atomic claim — only the FIRST message in a session ever sends.
+    const claimed = await pool.query(
+      `UPDATE sales_chats SET chat_notified_at = NOW()
+        WHERE session_id = $1 AND chat_notified_at IS NULL
+        RETURNING session_id`,
+      [sessionId]
+    );
+    if (!claimed.rows[0]) return;
+    const snippet = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+    await sendSms(to,
+      `💬 New SiamEPOS website chat (${channel})\n"${snippet}"\nTake over: Control Room → 💬 Web Chat`);
+    console.log(`[chat-alert] SMS sent — ${channel} session ${sessionId}`);
+  } catch (e) {
+    console.warn('[chat-alert]', e.message);
+  }
+}
+
+module.exports = { scan, detectContact, notifyNewChat };

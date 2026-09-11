@@ -46,6 +46,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- SEPOS-ANDROID-AUTOUPDATE-001 — install a newer APK the user downloads in-app. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- SEPOS-028 — scan a QR on setup to point this device at its till. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />

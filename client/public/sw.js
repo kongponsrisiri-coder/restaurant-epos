@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v177'; // v177: v1.9.58 — tips split by cash/card on the Z
+const CACHE_NAME = 'siamepos-shell-v178'; // v178: v1.9.59 — add payment/deposit to a closed bill + £0 bills stay visible
 const APP_SHELL = [
   '/',
   '/index.html',

@@ -328,7 +328,7 @@ export default function BillsSection() {
                 <span style={{ fontWeight: 700, color:'var(--brand-primary, #1a1a2e)' }}>{dineTableLabel(bill)}</span>
                 <span style={{ color: '#555' }}>{bill.covers || '—'}</span>
                 <span style={{ color: '#555' }}>{formatDateTime(bill.closed_at)}</span>
-                <span><span style={{ background: bill.method === 'Cash' ? '#dcfce7' : bill.method === 'Card' ? '#dbeafe' : bill.method === 'Split' ? '#fef3c7' : '#f3f4f6', color: bill.method === 'Cash' ? '#14532d' : bill.method === 'Card' ? '#1e40af' : bill.method === 'Split' ? '#92400e' : '#374151', padding: '2px 8px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{bill.method === 'Cash' ? '💵' : bill.method === 'Card' ? '💳' : bill.method === 'Split' ? '🔀' : '🔄'} {bill.method}{bill.method === 'Split' && Array.isArray(bill.tenders) ? ` (${bill.tenders.length})` : ''}</span></span>
+                <span><span style={{ background: bill.method === 'Cash' ? '#dcfce7' : bill.method === 'Card' ? '#dbeafe' : bill.method === 'Split' ? '#fef3c7' : '#f3f4f6', color: bill.method === 'Cash' ? '#14532d' : bill.method === 'Card' ? '#1e40af' : bill.method === 'Split' ? '#92400e' : '#374151', padding: '2px 8px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{bill.method === 'Cash' ? '💵' : bill.method === 'Card' ? '💳' : bill.method === 'Split' ? '🔀' : (bill.method ? '🔄' : '⚠️')} {bill.method || 'No payment'}{bill.method === 'Split' && Array.isArray(bill.tenders) ? ` (${bill.tenders.length})` : ''}</span></span>
                 <span style={{ textAlign: 'right', color: bill.discount_value > 0 ? '#22c55e' : '#bbb', fontSize: 13 }}>{bill.discount_value > 0 ? bill.discount_type === 'percent' ? `-${bill.discount_value}%` : `-£${bill.discount_value}` : '—'}</span>
                 <span style={{ textAlign: 'right', fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(bill.paid_amount || bill.total || 0).toFixed(2)}</span>
                 <span style={{ textAlign: 'center', display:'flex', justifyContent:'center', alignItems:'center', gap:6 }}>
@@ -538,9 +538,11 @@ export default function BillsSection() {
 // Manager/admin PIN taken here; the server re-validates the role. Editing the
 // record does NOT refund a card double-charge — that's done on the terminal.
 function EditPaymentModal({ bill, items = [], onClose, onDone }) {
-  const tenderList = (Array.isArray(bill.tenders) && bill.tenders.length
+  const tenderList = (Array.isArray(bill.tenders) && bill.tenders.length)
     ? bill.tenders
-    : [{ id: null, method: bill.method || 'Card', amount: Number(bill.paid_amount || bill.total || 0) }]);
+    : (Number(bill.paid_amount || 0) > 0
+        ? [{ id: null, method: bill.method || 'Card', amount: Number(bill.paid_amount || bill.total || 0) }]
+        : []);   // SEPOS-CLOSEDPAY-ADD-001 — removed/£0 bill: no existing rows, use "Add payment"
   const multiRound = tenderList.length > 1;
   // SEPOS-QR-RECEIPT-002 — label each round with its number + item so a manager
   // refunding ONE person of a split self-order table picks the right one. Items
@@ -562,16 +564,24 @@ function EditPaymentModal({ bill, items = [], onClose, onDone }) {
   const { subtotal, discount: mDiscount, service, billTotal: expected } = billMoney(bill); // expected = what the bill SHOULD have been paid, discount included
   const newTotal = rows.reduce((s, r) => s + (r.remove ? 0 : (parseFloat(r.amount) || 0)), 0);
   const editable = rows.some(r => r.id != null);
+  const canSave = editable || rows.some(r => r.isNew);   // SEPOS-CLOSEDPAY-ADD-001
 
   const setRow = (i, patch) => setRows(rows.map((r, j) => j === i ? { ...r, ...patch } : r));
 
   const save = async () => {
     if (busy) return;
     setErr('');
-    const payments = rows.filter(r => r.id != null).map(r => ({
-      id: r.id, remove: r.remove, method: r.method, amount: parseFloat(r.amount) || 0,
-    }));
-    if (!payments.length) { setErr('This bill has no editable payment rows.'); return; }
+    const payments = [];
+    for (const r of rows) {
+      if (r.isNew) {                                        // SEPOS-CLOSEDPAY-ADD-001 — a new tender
+        const amt = parseFloat(r.amount) || 0;
+        if (amt <= 0) { setErr('A new payment needs an amount above £0.'); return; }
+        payments.push({ add: true, method: r.method, amount: amt });
+      } else if (r.id != null) {
+        payments.push({ id: r.id, remove: r.remove, method: r.method, amount: parseFloat(r.amount) || 0 });
+      }
+    }
+    if (!payments.length) { setErr('Nothing to save — edit a payment or add one.'); return; }
     if (!pin) { setErr('Manager PIN required.'); return; }
     setBusy(true);
     try {
@@ -596,22 +606,30 @@ function EditPaymentModal({ bill, items = [], onClose, onDone }) {
             </div>
           )}
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-            <select value={r.method} disabled={r.remove || r.id == null} onChange={e => setRow(i, { method:e.target.value })} style={{ ...box, width:110 }}>
-              {['Cash','Card','Other','Stripe'].map(m => <option key={m} value={m}>{m}</option>)}
+            <select value={r.method} disabled={r.remove || (r.id == null && !r.isNew)} onChange={e => setRow(i, { method:e.target.value })} style={{ ...box, width:110 }}>
+              {(r.isNew ? ['Cash','Card','Other','Stripe','Deposit'] : ['Cash','Card','Other','Stripe']).map(m => <option key={m} value={m}>{m}</option>)}
             </select>
             <div style={{ position:'relative', flex:1 }}>
               <span style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'#888' }}>£</span>
-              <input type="text" inputMode="decimal" step="0.01" value={r.amount} disabled={r.remove || r.id == null} onChange={e => setRow(i, { amount:e.target.value })} style={{ ...box, paddingLeft:22, textDecoration: r.remove ? 'line-through' : 'none' }} />
+              <input type="text" inputMode="decimal" step="0.01" value={r.amount} disabled={r.remove || (r.id == null && !r.isNew)} onChange={e => setRow(i, { amount:e.target.value })} style={{ ...box, paddingLeft:22, textDecoration: r.remove ? 'line-through' : 'none' }} />
             </div>
-            {r.id != null && (
+            {r.id != null ? (
               <button onClick={() => setRow(i, { remove: !r.remove })} title={r.remove ? 'Keep this payment' : 'Remove this payment'}
                 style={{ background: r.remove ? '#6b7280' : '#fee2e2', color: r.remove ? 'white' : '#dc2626', border:'none', borderRadius:8, padding:'8px 10px', fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
                 {r.remove ? 'Undo' : '✕ Remove'}
               </button>
+            ) : (
+              <button onClick={() => setRows(rows.filter((_, j) => j !== i))} title="Discard this new payment"
+                style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:8, padding:'8px 10px', fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>✕</button>
             )}
           </div>
           </div>
         ))}
+
+        <button onClick={() => setRows([...rows, { id: null, isNew: true, method: 'Deposit', amount: '', remove: false }])}
+          style={{ width:'100%', background:'#eef2ff', color:'var(--brand-primary,#0D1B3E)', border:'1px dashed #c7d2fe', borderRadius:8, padding:'9px 12px', fontWeight:700, fontSize:13, cursor:'pointer', marginBottom:6 }}>
+          ➕ Add a payment (e.g. a deposit the staff forgot)
+        </button>
 
         <div style={{ display:'flex', justifyContent:'space-between', fontWeight:800, fontSize:15, padding:'8px 0', borderTop:'2px solid #eee', marginTop:4, color: Math.abs(newTotal - expected) < 0.01 ? '#16a34a' : '#e94560' }}>
           <span>New total paid</span><span>£{newTotal.toFixed(2)}</span>
@@ -624,9 +642,9 @@ function EditPaymentModal({ bill, items = [], onClose, onDone }) {
         <input value={reason} onChange={e => setReason(e.target.value)} placeholder="Reason (e.g. duplicate charge)" style={{ ...box, marginBottom:10 }} />
         <input value={pin} onChange={e => setPin(e.target.value)} type="password" inputMode="numeric" placeholder="Manager PIN" style={{ ...box, marginBottom:12 }} />
         {err && <div style={{ color:'#dc2626', fontSize:13, marginBottom:10 }}>{err}</div>}
-        {!editable && <div style={{ color:'#dc2626', fontSize:12, marginBottom:10 }}>Older bill without linked payment rows — can't edit here.</div>}
+        {!editable && <div style={{ color:'#92400e', fontSize:12, marginBottom:10 }}>No editable payment on this bill — use ➕ Add a payment to record one.</div>}
         <div style={{ display:'flex', gap:10 }}>
-          <button onClick={save} disabled={busy || !editable} style={{ flex:2, padding:'12px', borderRadius:10, border:'none', background: busy || !editable ? '#9ca3af' : 'var(--brand-primary,#0D1B3E)', color:'white', fontWeight:800, fontSize:15, cursor: busy || !editable ? 'not-allowed' : 'pointer' }}>{busy ? 'Saving…' : 'Save correction'}</button>
+          <button onClick={save} disabled={busy || !canSave} style={{ flex:2, padding:'12px', borderRadius:10, border:'none', background: busy || !canSave ? '#9ca3af' : 'var(--brand-primary,#0D1B3E)', color:'white', fontWeight:800, fontSize:15, cursor: busy || !canSave ? 'not-allowed' : 'pointer' }}>{busy ? 'Saving…' : 'Save correction'}</button>
           <button onClick={onClose} style={{ flex:1, padding:'12px', borderRadius:10, border:'none', background:'#f0f0f0', fontWeight:600, cursor:'pointer' }}>Cancel</button>
         </div>
       </div>

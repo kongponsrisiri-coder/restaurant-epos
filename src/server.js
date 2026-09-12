@@ -4360,6 +4360,21 @@ app.post('/api/sync/edit-payment', async (req, res) => {
     const rows = [...cur.rows];
     let applied = 0, skipped = 0;
     for (const e of edits) {
+      // SEPOS-CLOSEDPAY-ADD-001 — replay a till-side ADD of a new tender. sync_key
+      // (checked above) makes the whole batch idempotent, so a plain INSERT is safe.
+      if (e && e.add) {
+        const addAmt = Number(e.to_amount);
+        const addMethod = String(e.to_method || '').trim();
+        if (!Number.isFinite(addAmt) || addAmt <= 0 || !addMethod) { skipped++; continue; }
+        const insCloud = await pool.query(`INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3) RETURNING id`, [orderId, addAmt, addMethod]);
+        const addNote = `Added payment: £${addAmt.toFixed(2)} ${addMethod} (till sync by ${byName})` + (syncKey ? ` [sync:${syncKey}]` : '');
+        await pool.query(
+          `INSERT INTO payment_amendments (payment_id, order_id, from_method, to_method, reason, amended_by) VALUES ($1,$2,$3,$4,$5,NULL)`,
+          [insCloud.rows[0].id, orderId, null, addMethod, [reason, addNote].filter(Boolean).join(' — ')]
+        );
+        applied++;
+        continue;
+      }
       const idx = rows.findIndex(p =>
         String(p.method) === String(e.from_method) &&
         Math.abs(Number(p.amount || 0) - Number(e.from_amount || 0)) < 0.005);
@@ -5171,7 +5186,7 @@ app.get('/api/bills', async (req, res) => {
     // vanish from Admin -> Bills, which is exactly the symptom Korakot
     // reported tonight (from a different cause).
     const _localBills = require('./services/archiveService').isLocalInstall();
-    let query = `SELECT orders.id, ${_localBills ? 'orders.cloud_id,' : ''} orders.total, orders.covers, orders.closed_at, orders.discount_type, orders.discount_value, orders.discount_reason, orders.order_type, orders.no_service_charge, orders.service_charge, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway, payments.method, payments.amount as paid_amount, payments.id AS payment_id FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.total > 0 AND payments.method IS NOT NULL AND payments.method != 'cancelled'`;
+    let query = `SELECT orders.id, ${_localBills ? 'orders.cloud_id,' : ''} orders.total, orders.covers, orders.closed_at, orders.discount_type, orders.discount_value, orders.discount_reason, orders.order_type, orders.no_service_charge, orders.service_charge, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway, payments.method, payments.amount as paid_amount, payments.id AS payment_id FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id AND payments.method IS NOT NULL AND payments.method != 'cancelled' WHERE orders.status='closed' AND orders.total > 0`;
     const params = [];
     let n = 1;
     if (from) { query += ` AND orders.closed_at::date >= $${n}::date`; params.push(from); n++; }
@@ -5205,8 +5220,13 @@ app.get('/api/bills', async (req, res) => {
               tenders: [], paid_amount: 0 };
         byOrder.set(r.id, b);
       }
-      b.tenders.push({ id: r.payment_id, method: r.method, amount: Number(r.paid_amount || 0) });
-      b.paid_amount += Number(r.paid_amount || 0);
+      // SEPOS-BILLVIS-001 — a closed bill whose only payment was removed/cancelled
+      // now appears with a NULL payment row so it never vanishes from the list
+      // (and a manager can re-add the correct tender). Skip the empty tender.
+      if (r.payment_id != null) {
+        b.tenders.push({ id: r.payment_id, method: r.method, amount: Number(r.paid_amount || 0) });
+        b.paid_amount += Number(r.paid_amount || 0);
+      }
     }
     let bills = [...byOrder.values()].map(b => ({
       ...b,
@@ -5378,7 +5398,29 @@ app.put('/api/bills/:id/edit-payment', async (req, res) => {
 
     let changed = 0;
     const semanticEdits = []; // SEPOS-AUDIT-001 — id-free description for the cloud replay
+    const allowedAdd = ['Cash', 'Card', 'Other', 'Stripe', 'Deposit'];
     for (const e of edits) {
+      // SEPOS-CLOSEDPAY-ADD-001 — ADD a new tender to a closed bill (e.g. a deposit
+      // the staff forgot to apply). No payment id → INSERT a fresh payments row,
+      // audited like an edit, so a bill can be corrected to "deposit £X + card £Y"
+      // after it was closed on a single method.
+      if (e && e.add && e.id == null) {
+        const addAmt = Number(e.amount);
+        if (!Number.isFinite(addAmt) || addAmt <= 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Added payment amount must be a positive number' }); }
+        const addMethod = String(e.method || '').trim();
+        if (!allowedAdd.includes(addMethod)) { await client.query('ROLLBACK'); return res.status(400).json({ error: `Added method must be one of ${allowedAdd.join(', ')}` }); }
+        const insRes = await client.query(`INSERT INTO payments (order_id, amount, method) VALUES ($1, $2, $3) RETURNING id`, [orderId, addAmt, addMethod]);
+        const newPid = insRes.rows[0].id;
+        const addNote = `Added payment: £${addAmt.toFixed(2)} ${addMethod}`;
+        await client.query(
+          `INSERT INTO payment_amendments (payment_id, order_id, from_method, to_method, reason, amended_by)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [newPid, orderId, null, addMethod, [reason, addNote].filter(Boolean).join(' — '), staff.id]
+        );
+        changed++;
+        semanticEdits.push({ add: true, to_method: addMethod, to_amount: addAmt });
+        continue;
+      }
       const pid = Number(e.id);
       const row = current.get(pid);
       if (!row) { await client.query('ROLLBACK'); return res.status(400).json({ error: `Payment ${e.id} is not on this bill` }); }

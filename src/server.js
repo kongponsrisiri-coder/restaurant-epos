@@ -4370,7 +4370,7 @@ app.post('/api/sync/edit-payment', async (req, res) => {
         const addNote = `Added payment: £${addAmt.toFixed(2)} ${addMethod} (till sync by ${byName})` + (syncKey ? ` [sync:${syncKey}]` : '');
         await pool.query(
           `INSERT INTO payment_amendments (payment_id, order_id, from_method, to_method, reason, amended_by) VALUES ($1,$2,$3,$4,$5,NULL)`,
-          [insCloud.rows[0].id, orderId, null, addMethod, [reason, addNote].filter(Boolean).join(' — ')]
+          [insCloud.rows[0].id, orderId, '(added)', addMethod, [reason, addNote].filter(Boolean).join(' — ')]
         );
         applied++;
         continue;
@@ -5415,7 +5415,7 @@ app.put('/api/bills/:id/edit-payment', async (req, res) => {
         await client.query(
           `INSERT INTO payment_amendments (payment_id, order_id, from_method, to_method, reason, amended_by)
            VALUES ($1,$2,$3,$4,$5,$6)`,
-          [newPid, orderId, null, addMethod, [reason, addNote].filter(Boolean).join(' — '), staff.id]
+          [newPid, orderId, '(added)', addMethod, [reason, addNote].filter(Boolean).join(' — '), staff.id]
         );
         changed++;
         semanticEdits.push({ add: true, to_method: addMethod, to_amount: addAmt });

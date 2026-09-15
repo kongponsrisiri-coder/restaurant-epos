@@ -409,7 +409,24 @@ export async function printBarOrderTicket({ order, items, popupWin = null, sentB
     if (!shouldPrint(settings)) return;
     const ip   = settings?.printer_bar_ip   || settings?.printer_kitchen_ip   || settings?.printer_receipt_ip;
     const port = settings?.printer_bar_port || settings?.printer_kitchen_port || settings?.printer_receipt_port || 9100;
-    await nativeKitchenPrint({ native: { order, items: barItems, kind: 'bar', bilingual }, ip, port, target: printTarget(settings, 'bar'), settings });
+    const target = printTarget(settings, 'bar');
+    // SEPOS-ANDROID-BARRENDER-001 (Korakot, 11 Sep) — the bar ticket printed the
+    // on-device CLASSIC layout while kitchen/receipt used the till's nice rendered
+    // raster (SEPOS-ANDROID-SERVERPRINT-001). Mirror the kitchen path: when the
+    // till can reach a NETWORK printer, ask IT to render + send (serverPrintBar ->
+    // printBarTicket -> tryRenderedTicket, course 'BAR') so the satellite matches
+    // the main till. On-device classic stays the fallback for a Sunmi built-in
+    // printer or when the server can't be reached / can't reach the printer.
+    const sunmi = (target === 'builtin' || target === 'auto') ? await sunmiAvailable() : false;
+    if (!sunmi && ip) {
+      try {
+        const r = await serverPrintBar(order.id, barItems, undefined);
+        if (r && r.success) return;
+        if (r && r.held) { console.warn('[bar-ticket] HELD by the server — banner offers retry/redirect'); return; }
+        console.warn('[bar-ticket] server print did not succeed, on-device fallback:', r?.error || r?.reason);
+      } catch (e) { console.warn('[bar-ticket] server print error, on-device fallback:', e?.message || e); }
+    }
+    await nativeKitchenPrint({ native: { order, items: barItems, kind: 'bar', bilingual }, ip, port, target, settings });
     return;
   }
 

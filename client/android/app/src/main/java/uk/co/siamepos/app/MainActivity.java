@@ -11,6 +11,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(PrinterPlugin.class);
         // SEPOS-ANDROID-002 — register the Sunmi built-in (inner) printer plugin.
         registerPlugin(SunmiPrinterPlugin.class);
+        // SEPOS-ANDROID-AUTOUPDATE-001 — register the one-tap APK self-update plugin.
+        registerPlugin(AppUpdatePlugin.class);
         super.onCreate(savedInstanceState);
         // SEPOS-ANDROID-001 — keep the screen on. This app runs as a fixed till /
         // kitchen display: a KDS must stay lit through service and a till must not

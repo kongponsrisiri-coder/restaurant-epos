@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install SiamEPOS Host — SiamEPOS</title>
+<meta name="description" content="Install the SiamEPOS Host app on an Android tablet so it runs as the main till that other tablets connect to.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="favicon.svg">
+<style>
+  :root { --navy:#0D1B3E; --gold:#C9A84C; --ink:#1a1a2e; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--navy);color:#fff;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.6}
+  body.thai .lang-en{display:none}
+  body:not(.thai) .lang-th{display:none}
+  .wrap{max-width:640px;margin:0 auto;padding:28px 20px 64px}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:26px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;letter-spacing:.2px}
+  .brand span.e{color:var(--gold)}
+  .lang-toggle{background:transparent;border:1px solid rgba(201,168,76,.5);color:var(--gold);border-radius:8px;padding:5px 12px;font-size:13px;font-weight:700;cursor:pointer}
+  h1{font-size:27px;line-height:1.25;margin:0 0 10px;font-weight:800}
+  .sub{color:rgba(255,255,255,.72);font-size:15.5px;margin:0 0 26px}
+  .card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:20px;margin-bottom:18px}
+  .ver{display:inline-block;background:rgba(201,168,76,.14);border:1px solid rgba(201,168,76,.4);color:var(--gold);
+       border-radius:999px;padding:4px 13px;font-size:13px;font-weight:800;letter-spacing:.4px;margin-bottom:14px}
+  .dl{display:block;text-align:center;background:var(--gold);color:var(--navy);text-decoration:none;
+      border-radius:12px;padding:17px 20px;font-size:17.5px;font-weight:800;margin:6px 0 10px}
+  .dl small{display:block;font-weight:600;font-size:12.5px;opacity:.75;margin-top:3px}
+  ol{margin:0;padding-left:22px}
+  ol li{margin-bottom:13px}
+  .note{background:rgba(201,168,76,.10);border:1px solid rgba(201,168,76,.32);border-radius:10px;padding:13px 15px;font-size:14px;color:#f0e6cf}
+  .warn{background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.35);border-radius:10px;padding:13px 15px;font-size:14px;color:#fecaca}
+  h2{font-size:17px;margin:0 0 12px;font-weight:800;color:var(--gold)}
+  .foot{color:rgba(255,255,255,.45);font-size:13px;text-align:center;margin-top:30px}
+  .foot a{color:rgba(201,168,76,.85)}
+  b{color:#fff}
+</style>
+</head>
+<body>
+<script>(function(){var s=null;try{s=localStorage.getItem('siamLang')}catch(e){}var th=(s==='th')||(s===null&&/^th/i.test((navigator.language||navigator.userLanguage||'')));if(th){document.body.classList.add('thai');document.documentElement.lang='th';}})();</script>
+
+<div class="wrap">
+
+  <div class="top">
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 104 104" aria-hidden="true">
+        <circle cx="52" cy="52" r="44" fill="none" stroke="#C9A84C" stroke-width="1.5"/>
+        <circle cx="52" cy="52" r="38" fill="none" stroke="#C9A84C" stroke-width="0.5" opacity="0.28"/>
+        <g transform="translate(52,52)">
+          <path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C"/>
+          <path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/>
+          <path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/>
+          <path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/>
+          <path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/>
+          <circle cx="0" cy="0" r="8" fill="#0D1B3E"/><circle cx="0" cy="0" r="4.5" fill="#C9A84C"/>
+        </g>
+      </svg>
+      <div>Siam<span class="e">EPOS</span></div>
+    </div>
+    <button class="lang-toggle" id="lt">ไทย</button>
+  </div>
+
+  <span class="ver">Host v1.76</span>
+  <h1><span class="lang-en">Install SiamEPOS Host</span><span class="lang-th">ติดตั้ง SiamEPOS Host</span></h1>
+  <p class="sub">
+    <span class="lang-en">This makes an Android tablet the <b>main till (the host)</b> — it runs your shop's system, and all the other tablets and tills connect to it. Most shops need only one host.</span>
+    <span class="lang-th">แอปนี้จะทำให้แท็บเล็ต Android เป็น <b>เครื่องหลัก (โฮสต์)</b> ของร้าน เป็นเครื่องที่รันระบบทั้งหมด และเครื่องอื่น ๆ จะเชื่อมต่อเข้ามาที่เครื่องนี้ ร้านส่วนใหญ่ต้องการโฮสต์เพียงเครื่องเดียว</span>
+  </p>
+
+  <div class="card">
+    <div class="warn">
+      <span class="lang-en"><b>Only one device should be the host.</b> If you just want an extra ordering tablet that connects to an existing till, install the <a href="/app" style="color:#fecaca;text-decoration:underline">tablet (satellite) app</a> instead — not this one.</span>
+      <span class="lang-th"><b>ควรมีเครื่องโฮสต์เพียงเครื่องเดียว</b> ถ้าคุณต้องการแค่แท็บเล็ตสั่งอาหารเพิ่มที่เชื่อมต่อกับเครื่องหลักที่มีอยู่ ให้ติดตั้ง <a href="/app" style="color:#fecaca;text-decoration:underline">แอปแท็บเล็ต (satellite)</a> แทน ไม่ใช่แอปนี้</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <a class="dl" id="dl" href="https://github.com/kongponsrisiri-coder/siamepos-releases/releases/download/host-v1.76/SiamEPOS-Host-v1.76.apk" download>
+      <span class="lang-en">Download SiamEPOS Host</span><span class="lang-th">ดาวน์โหลด SiamEPOS Host</span>
+      <small>SiamEPOS-Host-v1.76.apk</small>
+    </a>
+    <div class="note">
+      <span class="lang-en"><b>Open this page on the tablet that will BE the host</b> — not on a computer. The file installs onto the device you download it on.</span>
+      <span class="lang-th"><b>เปิดหน้านี้บนแท็บเล็ตเครื่องที่จะเป็นโฮสต์</b> ไม่ใช่บนคอมพิวเตอร์ เพราะไฟล์จะติดตั้งลงบนเครื่องที่ดาวน์โหลดเท่านั้น</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="lang-en">How to install</span><span class="lang-th">วิธีติดตั้ง</span></h2>
+    <ol>
+      <li>
+        <span class="lang-en">Tap <b>Download SiamEPOS Host</b> above, then open the downloaded file.</span>
+        <span class="lang-th">กด <b>ดาวน์โหลด SiamEPOS Host</b> ด้านบน แล้วเปิดไฟล์ที่ดาวน์โหลดมา</span>
+      </li>
+      <li>
+        <span class="lang-en">Android will ask permission to install from your browser. Tap <b>Settings</b>, switch on <b>Allow from this source</b>, then go back. Once per tablet.</span>
+        <span class="lang-th">ระบบจะขออนุญาตติดตั้งจากเบราว์เซอร์ ให้กด <b>การตั้งค่า</b> เปิด <b>อนุญาตจากแหล่งนี้</b> แล้วย้อนกลับ ทำครั้งเดียวต่อเครื่อง</span>
+      </li>
+      <li>
+        <span class="lang-en">Tap <b>Install</b>, then open the app and follow the first-time setup below.</span>
+        <span class="lang-th">กด <b>ติดตั้ง</b> จากนั้นเปิดแอปแล้วทำตามการตั้งค่าครั้งแรกด้านล่าง</span>
+      </li>
+    </ol>
+    <div class="warn" style="margin-top:6px">
+      <span class="lang-en"><b>You may see a security warning</b> because the app is installed directly, not from the Play Store. This is normal — choose to continue or install anyway. The app is signed by SiamEPOS.</span>
+      <span class="lang-th"><b>อาจมีคำเตือนด้านความปลอดภัย</b> เพราะติดตั้งโดยตรง ไม่ได้ผ่าน Play Store ถือเป็นเรื่องปกติ ให้เลือกดำเนินการต่อ แอปนี้มีลายเซ็นรับรองจาก SiamEPOS</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="lang-en">First-time setup (like the PC host)</span><span class="lang-th">การตั้งค่าครั้งแรก (เหมือนเครื่องหลักบน PC)</span></h2>
+    <ol>
+      <li>
+        <span class="lang-en">On first launch, enter your <b>restaurant name, cloud address, restaurant ID and sync key</b> — the same four details as the PC host (we provide these).</span>
+        <span class="lang-th">เมื่อเปิดครั้งแรก ให้กรอก <b>ชื่อร้าน, ที่อยู่คลาวด์, รหัสร้าน และ sync key</b> ซึ่งเป็นสี่ค่าเดียวกับเครื่องหลักบน PC (เราจะให้ข้อมูลนี้)</span>
+      </li>
+      <li>
+        <span class="lang-en">Allow the <b>Local Network</b> permission if asked — the other tablets reach the host over Wi-Fi.</span>
+        <span class="lang-th">อนุญาต <b>Local Network</b> หากระบบถาม เพราะเครื่องอื่นจะเชื่อมต่อมาที่โฮสต์ผ่าน Wi-Fi</span>
+      </li>
+      <li>
+        <span class="lang-en"><b>Reserve the host's IP on your router (DHCP reservation).</b> This keeps its address fixed so the other tablets never lose it after a router restart. (No Windows Firewall step is needed on Android.)</span>
+        <span class="lang-th"><b>จองหมายเลข IP ของโฮสต์บนเราเตอร์ (DHCP reservation)</b> เพื่อให้ที่อยู่คงที่ เครื่องอื่นจะได้ไม่หลุดการเชื่อมต่อเมื่อเราเตอร์รีสตาร์ท (บน Android ไม่ต้องตั้งค่า Firewall แบบ Windows)</span>
+      </li>
+      <li>
+        <span class="lang-en">On each other tablet, open the <a href="/app" style="color:var(--gold)">tablet app</a> and scan the QR shown on this host (<b>Admin → Settings</b>), or type the host's address.</span>
+        <span class="lang-th">บนแท็บเล็ตเครื่องอื่น เปิด <a href="/app" style="color:var(--gold)">แอปแท็บเล็ต</a> แล้วสแกน QR ที่แสดงบนโฮสต์ (<b>Admin → Settings</b>) หรือพิมพ์ที่อยู่ของโฮสต์</span>
+      </li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2><span class="lang-en">Keep the host running</span><span class="lang-th">ดูแลให้โฮสต์ทำงานตลอด</span></h2>
+    <ul style="margin:0;padding-left:22px">
+      <li><span class="lang-en">Keep it <b>plugged in and awake</b> — the host is your shop's server; if it sleeps, the other tablets can't order.</span>
+          <span class="lang-th">ให้ <b>เสียบสายชาร์จและเปิดหน้าจอตลอด</b> เพราะโฮสต์คือเซิร์ฟเวอร์ของร้าน ถ้าหลับ เครื่องอื่นจะสั่งอาหารไม่ได้</span></li>
+      <li><span class="lang-en">Keep it <b>stationary and on the shop Wi-Fi</b> — don't carry the host around.</span>
+          <span class="lang-th">ตั้งไว้ <b>กับที่และเชื่อม Wi-Fi ของร้าน</b> อย่าถือโฮสต์เดินไปมา</span></li>
+      <li><span class="lang-en">Android 7 or newer.</span>
+          <span class="lang-th">รองรับ Android 7 ขึ้นไป</span></li>
+    </ul>
+  </div>
+
+  <p class="foot">
+    <span class="lang-en">Need a hand? Email <a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></span>
+    <span class="lang-th">ต้องการความช่วยเหลือ ติดต่อ <a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></span>
+  </p>
+</div>
+
+<script>
+  document.getElementById('lt').addEventListener('click', function () {
+    var th = document.body.classList.toggle('thai');
+    document.documentElement.lang = th ? 'th' : 'en';
+    this.textContent = th ? 'EN' : 'ไทย';
+    try { localStorage.setItem('siamLang', th ? 'th' : 'en'); } catch (e) {}
+  });
+  (function(){ var b=document.getElementById('lt'); if(document.body.classList.contains('thai')) b.textContent='EN'; })();
+</script>
+</body>
+</html>

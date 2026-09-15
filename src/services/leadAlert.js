@@ -8,7 +8,7 @@
 // the same Twilio creds the booking-confirmation SMS uses. Dormant without
 // the env. LINE/email deliberately NOT used — Korakot chose SMS.
 
-const { pool } = require('../db/dbAdapter');
+const pool = require('../db/dbAdapter'); // dbAdapter exports the pool itself — destructuring gave undefined and both alerts died silently
 const { sendSms } = require('./emailService');
 
 // Email, or a UK-ish phone (07…, +44…, 0044…) with 10+ digits once

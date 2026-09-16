@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v179'; // v179: v1.9.60 — check-back per course, customer on order, day-closed guard, reprint deposit, online-ordering switch
+const CACHE_NAME = 'siamepos-shell-v180'; // v180: v1.9.61 — + remote support built in (Settings card)
 const APP_SHELL = [
   '/',
   '/index.html',

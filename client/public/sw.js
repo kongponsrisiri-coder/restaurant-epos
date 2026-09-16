@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v180'; // v180: v1.9.61 — + remote support built in (Settings card)
+const CACHE_NAME = 'siamepos-shell-v181'; // v181: v1.9.62 — + floor-map bill reprint shows deposit/service like the original
 const APP_SHELL = [
   '/',
   '/index.html',

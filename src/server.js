@@ -8197,6 +8197,19 @@ app.get('/api/takeaway/availability', widgetCors, async (req, res) => {
   }
 });
 
+// SEPOS-ONLINE-TOGGLE-001 — owner switch to pause online (takeaway/delivery)
+// ordering: Admin → Settings → Online Ordering. Absent or '1' = on; '0' = paused.
+// Read fresh on every call (a minute-old value is fine, a stale cache is not —
+// the owner flips this mid-service). QR table ordering and bookings are NOT
+// gated by this — only the website order page / widget / online order creation.
+async function onlineOrderingEnabled() {
+  try {
+    const r = await pool.query(`SELECT value FROM settings WHERE key = 'online_ordering_enabled'`);
+    return String(r.rows[0]?.value ?? '1') !== '0';
+  } catch { return true; }
+}
+const ONLINE_PAUSED_MSG = 'Online ordering is paused';
+
 app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
   try {
     const r = await pool.query(`
@@ -8228,6 +8241,7 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
       delivery_radius_miles: deliveryEnabled ? Number(cfg.delivery_radius_miles) : 0,
       discount_percent: discountPercent,
       discount_min_total: discountMinTotal,
+      online_ordering_enabled: await onlineOrderingEnabled(),   // SEPOS-ONLINE-TOGGLE-001
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -8318,6 +8332,9 @@ app.get('/api/takeaway/delivery-check', widgetCors, async (req, res) => {
 
 // Submit a takeaway order from the public widget.
 app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireValidLicense, async (req, res) => {
+  // SEPOS-ONLINE-TOGGLE-001 — refuse BEFORE opening a session or touching the
+  // DB; a paused venue must not accumulate half-made orders or a phantom shift.
+  if (!await onlineOrderingEnabled()) return res.status(503).json({ error: ONLINE_PAUSED_MSG });
   await ensureOpenSession(resolveRestaurantId(req)); // SEPOS-AUTO-SESSION-001
   const client = await pool.connect();
   try {
@@ -8846,6 +8863,7 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
 });
 
 app.post('/api/takeaway/payment-intent', widgetCors, async (req, res) => {
+  if (!await onlineOrderingEnabled()) return res.status(503).json({ error: ONLINE_PAUSED_MSG }); // SEPOS-ONLINE-TOGGLE-001
   const sp = siampayCfg();
   if (!process.env.STRIPE_SECRET_KEY && !sp) {
     return res.status(503).json({ error: 'Stripe not configured on this restaurant. Please ask the restaurant to switch to demo mode.' });
@@ -9285,7 +9303,28 @@ app.get('/qr/t/:token', (req, res) => {
 // style (photos, option sheets, kitchen messages). Client websites link a
 // button here instead of embedding the legacy takeaway widget; talks to the
 // existing hardened /api/takeaway/* endpoints (server pricing, Stripe/mock).
-app.get('/order', (req, res) => {
+// SEPOS-ONLINE-TOGGLE-001 — when the owner has paused online ordering, the
+// hosted page shows a friendly notice (their name, colours, phone) instead of a
+// menu the customer can't order from. The page's own boot also checks the flag
+// (belt and braces for a cached copy); the API refuses regardless.
+async function onlinePausedPage() {
+  const r = await pool.query(`SELECT key, value FROM settings WHERE key IN ('company_name','restaurant_name','company_phone','restaurant_phone','brand_primary')`);
+  const cfg = {}; for (const row of r.rows) cfg[row.key] = row.value;
+  const name  = cfg.company_name || cfg.restaurant_name || 'Order online';
+  const phone = (cfg.company_phone || cfg.restaurant_phone || process.env.RESTAURANT_PHONE || '').trim();
+  const brand = /^#[0-9a-f]{6}$/i.test(cfg.brand_primary || '') ? cfg.brand_primary : '#1E4038';
+  const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const tel = phone ? `<p class="tel">Please call us on <a href="tel:${esc(phone.replace(/\s+/g, ''))}">${esc(phone)}</a></p>` : '';
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(name)} — online ordering paused</title>
+<style>body{margin:0;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f4ef;color:#1a1a2e;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{background:#fff;border-radius:16px;padding:32px 28px;max-width:440px;width:100%;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.08);border-top:6px solid ${brand}}
+h1{font-size:22px;margin:0 0 6px;color:${brand}} h2{font-size:18px;margin:14px 0 8px} p{margin:8px 0;line-height:1.5;color:#444} .tel a{color:${brand};font-weight:700;text-decoration:none;font-size:18px}</style></head>
+<body><div class="card"><h1>${esc(name)}</h1><div style="font-size:40px;line-height:1">⏸</div><h2>Online ordering is paused right now</h2><p>We're not taking online orders at the moment.</p>${tel}<p style="font-size:13px;color:#888;margin-top:16px">Please check back later — thank you for your patience.</p></div></body></html>`;
+}
+app.get('/order', async (req, res) => {
+  try {
+    if (!await onlineOrderingEnabled()) return res.status(200).type('html').send(await onlinePausedPage());
+  } catch { /* fall through to the normal page — never blank the customer */ }
   res.sendFile(path.join(__dirname, '..', 'public', 'order.html'));
 });
 
@@ -9297,7 +9336,10 @@ app.get('/book', (req, res) => {
 
 // SEPOS-ORDER-UNIFY-001 — the previous standalone /order UI, kept for
 // comparison and instant rollback while the widget-hosted page beds in.
-app.get('/order-legacy', (req, res) => {
+app.get('/order-legacy', async (req, res) => {
+  try {
+    if (!await onlineOrderingEnabled()) return res.status(200).type('html').send(await onlinePausedPage()); // SEPOS-ONLINE-TOGGLE-001
+  } catch { /* fall through */ }
   res.sendFile(path.join(__dirname, '..', 'public', 'order-legacy.html'));
 });
 

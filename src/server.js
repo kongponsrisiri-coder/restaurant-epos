@@ -1515,6 +1515,36 @@ app.get('/api/devices/remote', requireStaffAuth(['admin', 'manager']), async (re
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-REMOTE-002 — manual (re)run of the RustDesk setup from Admin → Settings on
+// THIS till (Windows desktop only). Same elevated script the app runs at launch;
+// the UAC prompt appears on the till, then the ID/password are re-read and
+// heartbeated straight away. Cloud / Mac / browser tills get a friendly 400.
+app.post('/api/remote/setup', requireStaffAuth(['admin', 'manager']), async (req, res) => {
+  try {
+    const script = process.env.RUSTDESK_SETUP_SCRIPT, stateFile = process.env.RUSTDESK_STATE_FILE;
+    if (process.platform !== 'win32' || !script || !stateFile) {
+      return res.status(400).json({ error: 'Remote support setup runs on the Windows till itself — open Admin → Settings on that till.' });
+    }
+    const fs = require('fs'), { spawn } = require('child_process');
+    if (!fs.existsSync(script)) return res.status(400).json({ error: 'Setup script missing — reinstall the till app.' });
+    await new Promise((resolve) => {
+      const ps = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-Command',
+        `Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${script}"'`],
+        { windowsHide: true, stdio: 'ignore' });
+      const t = setTimeout(() => { try { ps.kill(); } catch {} resolve(); }, 4 * 60 * 1000);
+      ps.on('exit', () => { clearTimeout(t); resolve(); }); ps.on('error', () => { clearTimeout(t); resolve(); });
+    });
+    let st = null;
+    try { st = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch {}
+    if (!st || !st.id || !st.password) {
+      return res.status(409).json({ error: 'Setup did not complete — was the Windows permission prompt accepted, and is the till online?' });
+    }
+    process.env.RUSTDESK_ID = st.id; process.env.RUSTDESK_PASSWORD = st.password;
+    try { await heartbeatClient.beat(); } catch {}
+    res.json({ success: true, rustdesk_id: st.id });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/device/heartbeat', async (req, res) => {
   try {
     const { device_id, app_version, platform } = req.body || {};

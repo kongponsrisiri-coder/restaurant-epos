@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, getArchiveStatus, openArchiveFolder, runArchive, getMigrationStatus, getStorageStats, getTunnelStatus, getKitchenTemplates, createKitchenTemplate, updateKitchenTemplate, deleteKitchenTemplate, assertOk, SERVER_URL, getRemoteDevices } from '../../api';
+import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, getArchiveStatus, openArchiveFolder, runArchive, getMigrationStatus, getStorageStats, getTunnelStatus, getKitchenTemplates, createKitchenTemplate, updateKitchenTemplate, deleteKitchenTemplate, assertOk, SERVER_URL, getRemoteDevices, setupRemoteSupport } from '../../api';
 import { applyBrandTheme, BRAND_PRESETS, DEFAULT_PRIMARY, DEFAULT_ACCENT } from '../../theme'; // SEPOS-BRAND-001
 import DiningDurationSettings from './DiningDurationSettings';
 import { confirm } from '../../utils/confirm';
@@ -751,6 +751,17 @@ export default function SettingsSection() {
   const [confirmDeviceAuth, setConfirmDeviceAuth] = useState(false);
   // SEPOS-REMOTE-002 — remote-support tills (RustDesk id/password reported by each till)
   const [remoteDevices, setRemoteDevices] = useState(null);
+  const [remoteSetupBusy, setRemoteSetupBusy] = useState(false);
+  const [remoteSetupMsg, setRemoteSetupMsg] = useState('');
+  const runRemoteSetup = async () => {
+    setRemoteSetupBusy(true); setRemoteSetupMsg('Windows will ask for permission on this till — click Yes. This takes about a minute…');
+    try {
+      const r = await setupRemoteSupport();
+      if (r && r.success) { setRemoteSetupMsg(`✓ Remote support is set up — ID ${r.rustdesk_id}.`); getRemoteDevices().then(d => setRemoteDevices(Array.isArray(d) ? d : [])).catch(() => {}); }
+      else setRemoteSetupMsg((r && r.error) || 'Setup did not complete.');
+    } catch (e) { setRemoteSetupMsg(e.message || 'Setup did not complete.'); }
+    finally { setRemoteSetupBusy(false); }
+  };
   useEffect(() => { getRemoteDevices().then(d => setRemoteDevices(Array.isArray(d) ? d : [])).catch(() => setRemoteDevices([])); }, []);
   const [settings, setSettings] = useState({
     company_name:            '',
@@ -1637,9 +1648,17 @@ export default function SettingsSection() {
         <div style={{ fontSize:12, color:'#888', marginBottom:12 }}>
           SiamEPOS support can connect to your till to help, using the details below (you'll see a notice on the till while a session is active). Share these only with SiamEPOS.
         </div>
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12, flexWrap:'wrap' }}>
+          <button type="button" onClick={runRemoteSetup} disabled={remoteSetupBusy}
+            style={{ padding:'9px 14px', borderRadius:10, border:'none', background:'var(--brand-primary, #0D1B3E)', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:700, opacity: remoteSetupBusy ? .6 : 1 }}>
+            {remoteSetupBusy ? 'Setting up…' : '🛟 Set up remote support on this till'}
+          </button>
+          <span style={{ fontSize:12, color:'#888' }}>Runs automatically on a Windows till's first start after updating; use this if the permission prompt was missed or declined.</span>
+        </div>
+        {remoteSetupMsg && <div style={{ fontSize:13, color: remoteSetupMsg.startsWith('✓') ? '#166534' : '#9a3412', marginBottom:10 }}>{remoteSetupMsg}</div>}
         {remoteDevices === null ? <div style={{ fontSize:13, color:'#aaa' }}>Loading…</div>
         : remoteDevices.filter(d => d.rustdesk_id).length === 0 ? (
-          <div style={{ fontSize:13, color:'#aaa' }}>No till has reported remote-support details yet — they appear after a Windows till restarts on v1.9.61 or later.</div>
+          <div style={{ fontSize:13, color:'#aaa' }}>No till has reported remote-support details yet — they appear after a Windows till restarts on v1.9.61 or later, or after the button above.</div>
         ) : remoteDevices.filter(d => d.rustdesk_id).map(d => (
           <div key={d.device_id} style={{ display:'flex', alignItems:'center', gap:14, padding:'10px 12px', border:'1px solid #eee', borderRadius:10, marginBottom:8, flexWrap:'wrap' }}>
             <div style={{ flex:1, minWidth:180 }}>

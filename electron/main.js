@@ -712,6 +712,8 @@ function startLocalServer() {
       APP_VERSION: app.getVersion(),
       // SEPOS-REMOTE-002 — reported by the heartbeat to the tenant (sync-secret gated)
       ...(process.env.RUSTDESK_ID ? { RUSTDESK_ID: process.env.RUSTDESK_ID, RUSTDESK_PASSWORD: process.env.RUSTDESK_PASSWORD || '' } : {}),
+      // so Admin → Settings → "Set up remote support" can re-run the same script on demand
+      ...(process.platform === 'win32' && app.isPackaged ? { RUSTDESK_SETUP_SCRIPT: path.join(process.resourcesPath, 'rustdesk-setup.ps1'), RUSTDESK_STATE_FILE: REMOTE_STATE || '' } : {}),
       // CLOUD_API_URL controls the Phase 3 sync target. Pass it through from
       // the launching shell if set; otherwise the queue accumulates with no push.
       ...(process.env.CLOUD_API_URL ? { CLOUD_API_URL: process.env.CLOUD_API_URL } : {}),

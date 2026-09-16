@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getSettings } from '../../api';
 import { dineTableLabel } from '../../utils/orderLabel';
 import { useBackdropDismiss } from '../../utils/backdropGuard';
+import { useDayClosedGuard, dayKeyOf } from '../../components/DayClosedGuard';   // SEPOS-ZCLOSE-GUARD-001
 import {
   thermalPrint, fullPagePrint, escPosPrint, pageHtml,
   fmt, fmtInt, dateLabel, restaurantName, nowStamp,
@@ -42,6 +43,12 @@ export function billMoney(bill) {
 const UNLOCK_DURATION_MS = 5 * 60 * 1000;
 
 export default function BillsSection() {
+  // SEPOS-ZCLOSE-GUARD-001 — editing/deleting a bill whose trading day already
+  // has an End of Day saved changes printed figures → manager PIN + warning
+  // first. Keyed on the BILL's close day, not today (a Monday fix to a Saturday
+  // bill is still a change to Saturday's Z).
+  const { guard: dayGuard, guardModal: dayGuardModal } = useDayClosedGuard();
+  const guardBill = (bill, action) => dayGuard(action, { date: dayKeyOf(bill?.closed_at), isNewSale: false });
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(false);
   const [from, setFrom] = useState(new Date().toISOString().split('T')[0]);
@@ -351,13 +358,13 @@ export default function BillsSection() {
                       obviously". Manager PIN is taken inside the modal —
                       server re-validates against staff role. */}
                   <button
-                    onClick={(e) => { e.stopPropagation(); setAmendTarget(bill); }}
+                    onClick={(e) => { e.stopPropagation(); guardBill(bill, () => setAmendTarget(bill)); }}
                     title="Change payment method"
                     style={{ background:'var(--brand-primary,#0D1B3E)', border:'none', color:'white', cursor:'pointer', fontSize:11, fontWeight:700, padding:'5px 9px', borderRadius:6, whiteSpace:'nowrap' }}
                   >🔄 Change</button>
                   {/* SEPOS-BILLEDIT-001 — correct a wrong/duplicate paid amount (manager PIN in the modal). */}
                   <button
-                    onClick={(e) => { e.stopPropagation(); setEditTarget(bill); }}
+                    onClick={(e) => { e.stopPropagation(); guardBill(bill, () => setEditTarget(bill)); }}
                     title="Edit the paid amount / fix a duplicate payment"
                     style={{ background:'#f59e0b', border:'none', color:'white', cursor:'pointer', fontSize:11, fontWeight:700, padding:'5px 9px', borderRadius:6, whiteSpace:'nowrap' }}
                   >✏️ Edit</button>
@@ -366,7 +373,7 @@ export default function BillsSection() {
                       SEPOS-043: supervisors can unlock but cannot delete. */}
                   {isUnlocked && unlockedRole !== 'supervisor' && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(bill); }}
+                      onClick={(e) => { e.stopPropagation(); guardBill(bill, () => setDeleteTarget(bill)); }}
                       title="Delete this transaction (manager PIN required)"
                       style={{ background: 'transparent', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 16, padding: '4px 6px', borderRadius: 6 }}
                     >🗑️</button>
@@ -493,6 +500,7 @@ export default function BillsSection() {
           </div>
         </div>
       )}
+      {dayGuardModal}
       {deleteTarget && (
         <DeleteOrderModal
           order={deleteTarget}

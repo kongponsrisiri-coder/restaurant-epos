@@ -14,6 +14,7 @@ import { roomSize } from '../utils/floorRoom';    // SEPOS-FLOOR-FIT shared room
 import TakeawayStrip    from '../components/TakeawayStrip';
 import ReprintBillsModal from '../components/ReprintBillsModal';
 import BillPeek         from '../components/BillPeek';
+import { useDayClosedGuard } from '../components/DayClosedGuard';   // SEPOS-ZCLOSE-GUARD-001
 import SyncHealthBanner from '../components/SyncHealthBanner';
 
 // Previous colour code (restored per operator request) — kept with the new
@@ -32,6 +33,9 @@ const COLOUR_MAP = {
 };
 
 export default function TableMapScreen({ staff, onOpenOrder }) {
+  // SEPOS-ZCLOSE-GUARD-001 — a NEW sale after today's End of Day needs a
+  // manager PIN + warning (it starts a new shift and changes printed figures).
+  const { guard: dayGuard, guardModal: dayGuardModal } = useDayClosedGuard();
   const [tables, setTables] = useState([]);
   const [tableStatuses, setTableStatuses] = useState([]);
   const [openOrders, setOpenOrders] = useState([]);
@@ -256,19 +260,27 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
       // SEPOS-TAKEAWAY-TABLE — no covers prompt; ring straight into a takeaway
       // order (order_type='takeaway' → skips service charge, kitchen labels it).
       if (creatingRef.current) return;         // SEPOS-GHOST-001 — ignore double-tap
-      creatingRef.current = true; setCreating(true);
-      try {
-        const data = await createOrder(table.id, 1, staff?.id, 'takeaway');
-        if (!data?.id) throw new Error(data?.error || 'No order id returned');
-        onOpenOrder(data.id, table.id);
-      } catch (err) {
-        alert(`Failed to start takeaway: ${err.message || 'please try again'}`);
-      } finally {
-        creatingRef.current = false; setCreating(false);
-      }
+      // SEPOS-ZCLOSE-GUARD-001 — new sale after End of Day → manager PIN first
+      dayGuard(async () => {
+        if (creatingRef.current) return;
+        creatingRef.current = true; setCreating(true);
+        try {
+          const data = await createOrder(table.id, 1, staff?.id, 'takeaway');
+          if (!data?.id) throw new Error(data?.error || 'No order id returned');
+          onOpenOrder(data.id, table.id);
+        } catch (err) {
+          alert(`Failed to start takeaway: ${err.message || 'please try again'}`);
+        } finally {
+          creatingRef.current = false; setCreating(false);
+        }
+      }, { isNewSale: true });
     } else {
-      setShowCoversPopup(table);
-      setCoversInput('');
+      // SEPOS-ZCLOSE-GUARD-001 — guard BEFORE the covers pad so the warning
+      // comes first, not after the waiter has typed covers.
+      dayGuard(() => {
+        setShowCoversPopup(table);
+        setCoversInput('');
+      }, { isNewSale: true });
     }
   };
 
@@ -779,6 +791,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           COVERS NUMPAD POPUP
           Added maxWidth: 90vw, bigger buttons on mobile
           ════════════════════════════════════════ */}
+      {dayGuardModal && createPortal(dayGuardModal, document.body)}
       {showCoversPopup && createPortal((
         <div style={{
           position: 'fixed', top: 0, right: 0, bottom: 0, left: 0,

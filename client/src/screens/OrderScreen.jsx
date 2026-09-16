@@ -1611,7 +1611,14 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                   <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Order · {dineTableLabel(order)}</span>
-                  <span style={{ fontSize: 13, color: '#9A9488', fontWeight: 600 }}>{existingItems.filter(i => !i.voided).reduce((s, i) => s + (i.quantity || 0), 0) + cart.reduce((s, c) => s + (c.quantity || 0), 0)} items</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {/* SEPOS-CUSTOMER-ORDER-001 — who this bill belongs to (desktop layout) */}
+                    <button onClick={openCustomerModal} title="Attach a customer to this bill (for the customer list and spend)"
+                      style={{ background: order?.customer_name ? '#eef2ff' : '#f3f4f6', color: order?.customer_name ? '#3730a3' : '#555', border: 'none', borderRadius: 999, padding: '4px 10px', cursor: 'pointer', fontWeight: 700, fontSize: 12, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      👤 {order?.customer_name ? order.customer_name : 'Customer'}
+                    </button>
+                    <span style={{ fontSize: 13, color: '#9A9488', fontWeight: 600 }}>{existingItems.filter(i => !i.voided).reduce((s, i) => s + (i.quantity || 0), 0) + cart.reduce((s, c) => s + (c.quantity || 0), 0)} items</span>
+                  </span>
                 </div>
                 {/* Course selector — moved here from the left menu (mockup). */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>

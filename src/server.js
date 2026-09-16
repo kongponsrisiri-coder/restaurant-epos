@@ -270,6 +270,28 @@ function resolveRestaurantId(req) {
 // so a shift can span midnight / two nights free of the timezone day boundary.
 const OPEN_SESSION_SUBQ = "(SELECT ts.id FROM till_sessions ts WHERE ts.status='open' AND ts.restaurant_id = orders.restaurant_id ORDER BY ts.opened_at DESC LIMIT 1)";
 
+// SEPOS-SYNC-TIMESTAMP-001 — a till replaying its queue (after an outage or a
+// stalled push) sends the ORIGINAL opened_at / closed_at / fired_at of the
+// order. Yum Yum's week-long stall (SEPOS-PUSH-STALL-001) drained on 6 Sep
+// and the cloud stamped all 318 orders with the PUSH time, so a week of cloud
+// history sits on the wrong day. Receivers now honour a supplied timestamp
+// and fall back to NOW() when it is absent (old tills), unparsable, or more
+// than 5 minutes in the future (a till with a wrong clock must not post-date
+// the cloud's books). Returned as ISO 8601 UTC; the cast below turns it into
+// the same wall-clock NOW() would have written on this backend.
+function syncTs(v) {
+  if (v == null || v === '') return null;
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return null;
+  if (d.getTime() - Date.now() > 5 * 60 * 1000) return null;
+  return d.toISOString();
+}
+// PG: ::timestamptz → assigned into the TIMESTAMP column through the session
+// time zone, exactly like NOW(). SQLite: datetime(?) of an ISO 'Z' string
+// yields naive UTC, exactly like CURRENT_TIMESTAMP (the adapter does not
+// translate ::timestamptz, hence the switch).
+const SYNC_TS_CAST = process.env.DB_MODE === 'local' ? '::timestamp' : '::timestamptz';
+
 // SEPOS-AUTO-SESSION-001 — open a till session automatically at the day's
 // first sale if none is open. A shift the staff open late (or not at all)
 // leaves paid bills outside every Z's session window — the money is in the
@@ -1571,6 +1593,7 @@ async function openDineInOrderDeduped({ tableId, covers, staffId }) {
 app.post('/api/orders', requireActiveSubscription, requireValidLicense, async (req, res) => {
   try {
     const { table_id, covers, staff_id, order_type } = req.body;
+    const openedAt = syncTs(req.body.opened_at); // SEPOS-SYNC-TIMESTAMP-001 (queue replay only; UI never sends it)
     // SEPOS-045 — counter orders (and any tableless mode) skip the table
     // status flip and don't enforce covers.
     const type = order_type === 'counter' || order_type === 'takeaway'
@@ -1640,9 +1663,9 @@ app.post('/api/orders', requireActiveSubscription, requireValidLicense, async (r
       for (let attempt = 0; ; attempt++) {
         try {
           result = await pool.query(
-            `INSERT INTO orders (table_id, staff_id, status, covers, order_type, opened_at)
-             VALUES ($1, $2, 'open', $3, $4, NOW()) RETURNING id`,
-            [insTable, insStaff, covers || 1, type]
+            `INSERT INTO orders (table_id, staff_id, status, covers, order_type, opened_at, created_at)
+             VALUES ($1, $2, 'open', $3, $4, COALESCE($5${SYNC_TS_CAST}, NOW()), COALESCE($5${SYNC_TS_CAST}, NOW())) RETURNING id`,
+            [insTable, insStaff, covers || 1, type, openedAt]
           );
           break;
         } catch (insErr) {
@@ -1785,7 +1808,9 @@ app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
 app.put('/api/orders/:id/fire-course/:course', async (req, res) => {
   try {
     const { id, course } = req.params;
-    const now = new Date().toISOString();
+    // SEPOS-SYNC-TIMESTAMP-001 — a queue replay carries the till's original
+    // fired_at; live fires (no body) stamp now, exactly as before.
+    const now = syncTs(req.body && req.body.fired_at) || new Date().toISOString();
     // SEPOS-032: capture ids about-to-be-fired before the UPDATE so we
     // can deplete stock for exactly that set.
     const aboutToFireRes = await pool.query(
@@ -2113,6 +2138,7 @@ app.put('/api/orders/:id/service-charge', async (req, res) => {
 // would break joins on the closed-orders endpoint).
 app.post('/api/orders/:id/close-zero', async (req, res) => {
   const orderId = req.params.id;
+  const closedAt = syncTs(req.body && req.body.closed_at); // SEPOS-SYNC-TIMESTAMP-001
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -2149,7 +2175,7 @@ app.post('/api/orders/:id/close-zero', async (req, res) => {
     }
 
     await client.query('INSERT INTO payments (order_id, amount, method) VALUES ($1, 0, $2)', [orderId, 'zero']);
-    await client.query(`UPDATE orders SET status='closed', closed_at=NOW(), total=0, service_charge=0, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
+    await client.query(`UPDATE orders SET status='closed', closed_at=COALESCE($2${SYNC_TS_CAST}, NOW()), total=0, service_charge=0, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId, closedAt]);
     await client.query('COMMIT');
     // SEPOS-AUDIT-001 — close the CLOUD copy too (no-op on cloud installs);
     // otherwise it stayed 'open' forever and the pull reopened the local row.
@@ -2168,6 +2194,7 @@ app.post('/api/orders/:id/close-zero', async (req, res) => {
 app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
   const { amount, method, tip } = req.body;
   const orderId = req.params.id;
+  const closedAt = syncTs(req.body.closed_at); // SEPOS-SYNC-TIMESTAMP-001 (queue replay only)
   const isCancel = String(method).toLowerCase() === 'cancelled' && Number(amount) === 0;
   // SEPOS-AUTO-SESSION-001 — belt-and-braces: a bill must never close outside
   // a shift window (covers orders created before this build shipped).
@@ -2241,7 +2268,7 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
         await client.query('ROLLBACK');
         return res.status(409).json({ error: `This bill is already ${order.status}.`, alreadyClosed: true });
       }
-      await client.query(`UPDATE orders SET status='cancelled', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
+      await client.query(`UPDATE orders SET status='cancelled', closed_at=COALESCE($2${SYNC_TS_CAST}, NOW()), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId, closedAt]);
       await client.query('COMMIT');
       await freeTableIfEmpty(order.table_id);   // round 5 — don't free a two-bill table
       // SEPOS-AUDIT-001 — this early-return path skipped the pay enqueue below,
@@ -2315,7 +2342,7 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
       closeServiceCharge = Number(serviceChargeForOrder({ ...order, service_charge: null }, scOn, scPct, discOverride).toFixed(2));
       if (String(method) === 'Complimentary') closeServiceCharge = 0; // SEPOS-COMP-001 — nothing is charged on a comped bill
     } catch { closeServiceCharge = 0; }
-    await client.query(`UPDATE orders SET status='closed', closed_at=NOW(), service_charge=$2, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId, closeServiceCharge]);
+    await client.query(`UPDATE orders SET status='closed', closed_at=COALESCE($3${SYNC_TS_CAST}, NOW()), service_charge=$2, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId, closeServiceCharge, closedAt]);
     await client.query('COMMIT');
 
     // ---- post-commit side effects (the order is now closed) ----

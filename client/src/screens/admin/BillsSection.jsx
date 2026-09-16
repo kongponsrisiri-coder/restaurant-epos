@@ -7,7 +7,7 @@ import {
   fmt, fmtInt, dateLabel, restaurantName, nowStamp,
 } from '../../utils/reportPrinter';
 import { printReceipt } from '../ReceiptPrinter';
-import { getBills, getBillItems, loginStaff, getBillAmendments, editBillPayment } from '../../api';
+import { getBills, getBillItems, loginStaff, getBillAmendments, editBillPayment, getOrderDepositApplied } from '../../api';
 import DeleteOrderModal from '../../components/DeleteOrderModal';
 import AmendPaymentModal from '../../components/AmendPaymentModal';
 import { downloadCsv } from '../../utils/csv';
@@ -143,7 +143,7 @@ export default function BillsSection() {
   // receipt printer, Electron silent print fallback, browser popup
   // last resort). Requires items to be loaded (they are, because the
   // operator had to expand the bill row to see this button).
-  const doReprintReceipt = (bill) => {
+  const doReprintReceipt = async (bill) => {
     if (!bill) return;
     if (!billItems.length) { alert('Items not loaded yet — try again in a moment.'); return; }
     // SEPOS-REPRINT-FOOT-001 (Fern #2375, 9 Sep) — a reprint used to INVENT the
@@ -159,6 +159,18 @@ export default function BillsSection() {
     // service as money-taken minus subtotal.
     const { subtotal, discount: discountAmount, service: serviceCharge, billTotal, paid, overpaid } = billMoney(bill);
     const tip = Math.max(0, overpaid);
+    // SEPOS-REPRINT-DEPOSIT-001 (Fern T7, 16 Sep) — the original bill prints
+    // "Deposit paid −£X / Balance due" from the deposit APPLIED to the order
+    // (model A, SEPOS-DEPOSIT-ORDER-001) plus any Deposit tender; the reprint
+    // never asked for the applied deposit, so a £30 booking deposit vanished
+    // and the reprint read "£118.45 → Card" where the original read
+    // "−£30.00 deposit, balance £88.45". Same maths as BillScreen.handlePrintBill.
+    let depositPaid = (Array.isArray(bill.tenders) ? bill.tenders : [])
+      .filter(t => t.method === 'Deposit').reduce((s, t) => s + Number(t.amount || 0), 0);
+    try {
+      const d = await getOrderDepositApplied(bill.id);
+      depositPaid += Math.min(Number(d?.applied || 0), billTotal);   // endpoint returns { applied, code }
+    } catch { /* no applied deposit (or offline) — print without the lines */ }
     printReceipt({
       order: bill,
       items: billItems,
@@ -172,6 +184,7 @@ export default function BillsSection() {
         change: 0,
         method: bill.method || '',
         tip,
+        depositPaid,
         // SEPOS-QR-RECEIPT-002 — pass the round breakdown so a split receipt
         // prints each round, not just "Payment: Split".
         tenders: Array.isArray(bill.tenders) ? bill.tenders : [],

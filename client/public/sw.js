@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v178'; // v178: v1.9.59 — add payment/deposit to a closed bill + £0 bills stay visible
+const CACHE_NAME = 'siamepos-shell-v179'; // v179: v1.9.60 — check-back per course, customer on order, day-closed guard, reprint deposit, online-ordering switch
 const APP_SHELL = [
   '/',
   '/index.html',

@@ -1454,7 +1454,7 @@ app.get('/api/health', async (req, res) => {
     // Wrapped separately so a missing devices table (older deploy) never breaks health.
     let tills = [];
     try {
-      const d = await pool.query(`SELECT device_id, app_version, platform, last_seen, queue_depth, queue_quarantined, queue_oldest_at FROM devices ORDER BY last_seen DESC`);
+      const d = await pool.query(`SELECT device_id, app_version, platform, last_seen, queue_depth, queue_quarantined, queue_oldest_at, rustdesk_id FROM devices ORDER BY last_seen DESC`);
       tills = d.rows.map(r => ({
         device_id: r.device_id,
         app_version: r.app_version,
@@ -1463,6 +1463,7 @@ app.get('/api/health', async (req, res) => {
         queue_depth: r.queue_depth ?? 0,               // SEPOS-SYNC-TELEMETRY-001
         queue_quarantined: r.queue_quarantined ?? 0,
         queue_oldest_at: r.queue_oldest_at ?? null,
+        rustdesk_id: r.rustdesk_id ?? null,             // SEPOS-REMOTE-002 (id only — password stays behind admin auth)
       }));
     } catch (_) { /* devices table not present yet */ }
     res.json({
@@ -1482,6 +1483,38 @@ app.get('/api/health', async (req, res) => {
 // + every few minutes so ops can see which tills exist, their version, platform
 // and last-seen. Ungated telemetry (device_id is the PK → repeated calls just
 // upsert one row). Field lengths capped defensively.
+// SEPOS-REMOTE-002 — per-till RustDesk password at rest: AES-256-GCM under a
+// key derived from this tenant's AUTH_SECRET. Only the admin endpoint below
+// decrypts; /api/health never carries the password.
+function remoteKey() { return crypto.createHash('sha256').update('siamepos-remote:' + AUTH_SECRET).digest(); }
+function remoteEncrypt(text) {
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv('aes-256-gcm', remoteKey(), iv);
+  const enc = Buffer.concat([c.update(String(text), 'utf8'), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), enc]).toString('base64');
+}
+function remoteDecrypt(b64) {
+  try {
+    const buf = Buffer.from(String(b64), 'base64');
+    const d = crypto.createDecipheriv('aes-256-gcm', remoteKey(), buf.subarray(0, 12));
+    d.setAuthTag(buf.subarray(12, 28));
+    return Buffer.concat([d.update(buf.subarray(28)), d.final()]).toString('utf8');
+  } catch { return null; }
+}
+
+// Owner/manager view: which tills of THIS restaurant can be reached remotely.
+app.get('/api/devices/remote', requireStaffAuth(['admin', 'manager']), async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT device_id, app_version, platform, last_seen, rustdesk_id, rustdesk_pw_enc, rustdesk_seen_at FROM devices ORDER BY last_seen DESC`);
+    res.json(r.rows.map(d => ({
+      device_id: d.device_id, app_version: d.app_version, platform: d.platform, last_seen: d.last_seen,
+      rustdesk_id: d.rustdesk_id || null,
+      rustdesk_password: d.rustdesk_pw_enc ? remoteDecrypt(d.rustdesk_pw_enc) : null,
+      rustdesk_seen_at: d.rustdesk_seen_at || null,
+    })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/device/heartbeat', async (req, res) => {
   try {
     const { device_id, app_version, platform } = req.body || {};
@@ -1506,6 +1539,18 @@ app.post('/api/device/heartbeat', async (req, res) => {
        String(app_version || '').slice(0, 20), String(platform || '').slice(0, 20),
        qDepth, qQuar, qOldest]
     );
+    // SEPOS-REMOTE-002 — remote-support details ride the heartbeat, but only
+    // when the request proves it comes from the till (tenant sync secret) —
+    // otherwise anyone could plant a "connect here" pointing at their own PC.
+    const secretOk = !!process.env.SYNC_SECRET && (req.get('x-sync-secret') || '') === process.env.SYNC_SECRET;
+    const rdId = String(req.body?.rustdesk_id || '').trim();
+    if (secretOk && /^\d{6,12}$/.test(rdId)) {
+      const pw = String(req.body?.rustdesk_password || '');
+      await pool.query(
+        `UPDATE devices SET rustdesk_id = $1, rustdesk_pw_enc = $2, rustdesk_seen_at = CURRENT_TIMESTAMP WHERE device_id = $3`,
+        [rdId, pw ? remoteEncrypt(pw) : null, String(device_id).slice(0, 64)]
+      );
+    }
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

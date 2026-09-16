@@ -710,6 +710,8 @@ function startLocalServer() {
       CLIENT_DIST_PATH: clientDist,
       // SEPOS-PRO-009 — so the till heartbeat reports the installed version to ops.
       APP_VERSION: app.getVersion(),
+      // SEPOS-REMOTE-002 — reported by the heartbeat to the tenant (sync-secret gated)
+      ...(process.env.RUSTDESK_ID ? { RUSTDESK_ID: process.env.RUSTDESK_ID, RUSTDESK_PASSWORD: process.env.RUSTDESK_PASSWORD || '' } : {}),
       // CLOUD_API_URL controls the Phase 3 sync target. Pass it through from
       // the launching shell if set; otherwise the queue accumulates with no push.
       ...(process.env.CLOUD_API_URL ? { CLOUD_API_URL: process.env.CLOUD_API_URL } : {}),
@@ -1008,6 +1010,41 @@ ipcMain.handle('quit-app', () => {
   app.quit();
 });
 
+// SEPOS-REMOTE-002 helpers ---------------------------------------------------
+const REMOTE_STATE = process.platform === 'win32'
+  ? path.join(process.env.ProgramData || 'C:\\ProgramData', 'SiamEPOS', 'remote.json') : null;
+function readRemoteState() {
+  try {
+    if (!REMOTE_STATE || !fs.existsSync(REMOTE_STATE)) return null;
+    const st = JSON.parse(fs.readFileSync(REMOTE_STATE, 'utf8'));
+    return (st && st.id && st.password) ? st : null;
+  } catch { return null; }
+}
+async function ensureRemoteSupport() {
+  const existing = readRemoteState();
+  const rdExe = path.join(process.env.ProgramFiles || 'C:\\Program Files', 'RustDesk', 'rustdesk.exe');
+  if (existing && fs.existsSync(rdExe)) {
+    process.env.RUSTDESK_ID = existing.id; process.env.RUSTDESK_PASSWORD = existing.password;
+    return;
+  }
+  const script = path.join(process.resourcesPath, 'rustdesk-setup.ps1');
+  if (!fs.existsSync(script)) { console.warn('[remote] setup script missing:', script); return; }
+  const { spawn } = require('child_process');
+  console.log('[remote] running RustDesk setup (elevated, one UAC prompt)…');
+  await new Promise((resolve) => {
+    // Start-Process -Verb RunAs = UAC; -Wait so we can read the result file after.
+    const ps = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-Command',
+      `Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${script}"'`],
+      { windowsHide: true, stdio: 'ignore' });
+    const t = setTimeout(() => { try { ps.kill(); } catch {} resolve(); }, 4 * 60 * 1000);
+    ps.on('exit', () => { clearTimeout(t); resolve(); });
+    ps.on('error', () => { clearTimeout(t); resolve(); });
+  });
+  const st = readRemoteState();
+  if (st) { process.env.RUSTDESK_ID = st.id; process.env.RUSTDESK_PASSWORD = st.password; console.log('[remote] RustDesk ready, id', st.id); }
+  else console.warn('[remote] RustDesk not set up yet (declined UAC / offline?) — will retry next launch');
+}
+
 app.whenReady().then(async () => {
   // SEPOS-EXIT-001 — a second instance that failed to get the lock is already
   // quitting; don't spawn a server or create a window from it.
@@ -1068,6 +1105,17 @@ app.whenReady().then(async () => {
   // Same env-wins-over-config precedence so devs can override.
   if (config.sync_secret && !process.env.SYNC_SECRET) {
     process.env.SYNC_SECRET = config.sync_secret;
+  }
+
+  // SEPOS-REMOTE-002 — remote support built into the till (Windows). Runs the
+  // bundled elevated PowerShell script (installs RustDesk if missing, points it
+  // at our own server, sets a permanent password once) and then reads
+  // %ProgramData%\SiamEPOS\remote.json so the heartbeat can report this till's
+  // RustDesk ID + password to ITS OWN tenant. One UAC prompt on the first run
+  // per machine; nothing here can block the till — every failure is logged and
+  // skipped, and it simply tries again next launch.
+  if (process.platform === 'win32' && app.isPackaged) {
+    try { await ensureRemoteSupport(); } catch (err) { console.warn('[remote] setup skipped:', err.message); }
   }
   // RESTAURANT_NAME / EMAIL / ADDRESS — used as branding in email
   // templates (booking confirmation, voucher gift, takeaway confirm,

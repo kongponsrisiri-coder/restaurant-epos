@@ -32,6 +32,10 @@
         "to": "client-dist"
       },
       {
+        "from": "build/rustdesk-setup.ps1",
+        "to": "rustdesk-setup.ps1"
+      },
+      {
         "from": "../src",
         "to": "src"
       },

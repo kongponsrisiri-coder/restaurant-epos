@@ -1,9 +1,9 @@
-# SiamEPOS v1.9.60 / v1.9.61 — What's new
+# SiamEPOS v1.9.63 — What's new
 
 *Released 16–17 September 2026*
 
 ## Table check-back
-After you call a course, the order screen now shows **🍽️ Arrived** — tap it when the food is on the table. It then turns into **✓ Check back** — tap that once you've asked the table if everything is fine. The table on the floor map shows a **✓** so the whole team can see which tables have been checked. Works for starters, mains and desserts. Tap the stamp again to undo.
+Every course on the order screen now shows **🍽️ Arrived** (no need to press Call first) — tap it when the food is on the table. It then turns into **✓ Check back** — tap that once you've asked the table if everything is fine. The table on the floor map shows a **✓** so the whole team can see which tables have been checked. Works for starters, mains and desserts. Tap the stamp again to undo.
 
 ## Customer on the bill
 A new **👤 Customer** button on every order (dine-in and takeaway). Search a guest you've served before, or type a name and phone. Their visits and spend then show correctly on the Customers tab — no more guessing by table and date.
@@ -14,7 +14,7 @@ Admin → Settings → **Online Ordering ON/OFF**. Turn it off on a night you ca
 ## After you've closed the day
 Once the End of Day report is printed, ringing a new sale or changing a closed bill now asks for a **manager PIN** and warns that the printed report will no longer match. Stops the "my Z doesn't match" surprise.
 
-## Remote support (v1.9.61, Windows tills)
+## Remote support (Windows tills)
 The till now sets up SiamEPOS remote support by itself the first time it starts after this update — Windows will ask once to allow it (click **Yes**). From then on, when you call us, we can see your screen and fix things without a visit; a notice shows on the till while we're connected. You'll find the details under Admin → Settings → **Remote support**. Share them only with SiamEPOS.
 
 ## Fixes
@@ -30,10 +30,10 @@ The till now sets up SiamEPOS remote support by itself the first time it starts 
 
 ---
 
-# SiamEPOS เวอร์ชัน 1.9.60 — มีอะไรใหม่
+# SiamEPOS เวอร์ชัน 1.9.63 — มีอะไรใหม่
 
 ## เช็คแบ็กโต๊ะ (Check-back)
-หลังจากกดเรียกคอร์ส หน้าออเดอร์จะมีปุ่ม **🍽️ Arrived** — กดเมื่ออาหารถึงโต๊ะ จากนั้นปุ่มจะเปลี่ยนเป็น **✓ Check back** — กดเมื่อถามลูกค้าแล้วว่าทุกอย่างเรียบร้อย โต๊ะบนแผนผังจะแสดงเครื่องหมาย **✓** ให้ทีมเห็นว่าโต๊ะไหนเช็คแล้ว ใช้ได้ทั้งของทานเล่น จานหลัก และของหวาน กดซ้ำเพื่อยกเลิก
+ทุกคอร์สในหน้าออเดอร์จะมีปุ่ม **🍽️ Arrived** (ไม่ต้องกดเรียกคอร์สก่อน) — กดเมื่ออาหารถึงโต๊ะ จากนั้นปุ่มจะเปลี่ยนเป็น **✓ Check back** — กดเมื่อถามลูกค้าแล้วว่าทุกอย่างเรียบร้อย โต๊ะบนแผนผังจะแสดงเครื่องหมาย **✓** ให้ทีมเห็นว่าโต๊ะไหนเช็คแล้ว ใช้ได้ทั้งของทานเล่น จานหลัก และของหวาน กดซ้ำเพื่อยกเลิก
 
 ## ระบุลูกค้าในบิล
 ปุ่ม **👤 Customer** ในทุกออเดอร์ (ทานที่ร้านและสั่งกลับบ้าน) ค้นหาลูกค้าที่เคยมา หรือพิมพ์ชื่อและเบอร์ใหม่ ประวัติการมาและยอดใช้จ่ายจะขึ้นในหน้า Customers อย่างถูกต้อง ไม่ต้องเดาจากโต๊ะและวันที่อีกต่อไป
@@ -44,7 +44,7 @@ Admin → Settings → **Online Ordering ON/OFF** คืนไหนรับไ
 ## หลังปิดยอดวัน
 เมื่อพิมพ์รายงาน End of Day แล้ว การเปิดออเดอร์ใหม่หรือแก้บิลที่ปิดแล้วจะขอ **PIN ผู้จัดการ** และเตือนว่ารายงานที่พิมพ์ไปจะไม่ตรงกับตัวเลขใหม่ ป้องกันปัญหา "ยอด Z ไม่ตรง"
 
-## รีโมตซัพพอร์ต (เวอร์ชัน 1.9.61 เครื่อง Windows)
+## รีโมตซัพพอร์ต (เครื่อง Windows)
 เครื่องแคชเชียร์จะตั้งค่ารีโมตซัพพอร์ตของ SiamEPOS ให้เองเมื่อเปิดครั้งแรกหลังอัปเดต — Windows จะถามอนุญาตหนึ่งครั้ง (กด **Yes**) จากนั้นเมื่อโทรหาเรา เราจะเห็นหน้าจอและแก้ปัญหาได้โดยไม่ต้องไปที่ร้าน ระหว่างเชื่อมต่อจะมีข้อความแจ้งบนจอ ดูรายละเอียดได้ที่ Admin → Settings → **Remote support** แชร์ข้อมูลนี้กับ SiamEPOS เท่านั้น
 
 ## แก้ไข

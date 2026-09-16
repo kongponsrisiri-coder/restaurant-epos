@@ -145,6 +145,10 @@ function initSchema() {
       payment_status TEXT,
       payment_intent_id TEXT,
       reservation_id INTEGER,
+      customer_id INTEGER,
+      checkback_starters_at TEXT,
+      checkback_mains_at TEXT,
+      checkback_desserts_at TEXT,
       cloud_id INTEGER
     );
 
@@ -775,6 +779,11 @@ function runMigrations() {
   addColumnIfMissing('menu_items', 'is_qr', 'INTEGER');
   // SEPOS-PRO-008: link a bill to its booking for accurate per-customer spend
   addColumnIfMissing('orders', 'reservation_id', 'INTEGER');
+  // SEPOS-CUSTOMER-ORDER-001 + SEPOS-CHECKBACK-001 (v1.9.60)
+  addColumnIfMissing('orders', 'customer_id', 'INTEGER');
+  addColumnIfMissing('orders', 'checkback_starters_at', 'TEXT');
+  addColumnIfMissing('orders', 'checkback_mains_at', 'TEXT');
+  addColumnIfMissing('orders', 'checkback_desserts_at', 'TEXT');
   // SEPOS-021: VAT rate per menu item
   addColumnIfMissing('menu_items', 'vat_rate', 'REAL DEFAULT 20.0');
   addColumnIfMissing('menu_items', 'is_online', 'INTEGER DEFAULT 1');

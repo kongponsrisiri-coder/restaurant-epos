@@ -194,10 +194,21 @@ async function autoPrintIncomingTakeaway(payload, opts = {}) {
 
     // SEPOS-PRINT-ALERT-001 — a failed auto-print on an online order is the
     // WORST silent failure (no staff even saw an order screen): hold + banner.
+    //
+    // SEPOS-PRINT-PACING-001 (Baanrai, 16 Sep) — jobs run ONE AT A TIME with a
+    // short gap: station groups → kitchen ticket → bar ticket, the same chaining
+    // the till client does for a dine-in send (SEPOS-026). Firing them in
+    // parallel put the bar ticket and the 2-copy kitchen ticket into the print
+    // server at the same instant; a truncated raster then feeds a BLANK strip.
+    // Each job keeps its own catch → printAlerts, so one failure never blocks
+    // the next job.
+    const JOB_GAP_MS = 400;
+    const pause = () => new Promise(r => setTimeout(r, JOB_GAP_MS));
     for (const [, grp] of stationGroups) {
-      printService.printKitchenToPrinter(grp.printer, settings, printOrder, grp.items)
+      await printService.printKitchenToPrinter(grp.printer, settings, printOrder, grp.items)
         .then(() => console.log(`🖨️ [cloud-relay] station "${grp.printer.name}" auto-printed for ${opts.qr ? 'QR order' : 'takeaway'} #${payload.id}`))
         .catch(err => printAlerts.recordFailure({ kind: 'station', printer: grp.printer, order: printOrder, items: grp.items, reason: err.message }));
+      await pause();
     }
     // F23 — items with no live station AND no kitchen printer must not vanish.
     if (mode !== 'kds' && kitchenItems.length &&
@@ -209,9 +220,10 @@ async function autoPrintIncomingTakeaway(payload, opts = {}) {
     }
     if (mode !== 'kds' && kitchenItems.length &&
         (settings.printer_kitchen_ip || settings.printer_kitchen_name)) {
-      printService.printFullKitchenTicket(settings, printOrder, kitchenItems)
+      await printService.printFullKitchenTicket(settings, printOrder, kitchenItems)
         .then(() => console.log(`🖨️ [cloud-relay] kitchen ticket auto-printed for ${opts.qr ? 'QR order' : 'takeaway'} #${payload.id}`))
         .catch(err => printAlerts.recordFailure({ kind: 'kitchen', printer: { name: 'Kitchen', ip: settings.printer_kitchen_ip }, order: printOrder, items: kitchenItems, reason: err.message }));
+      await pause();
     }
     // Verify pass (round 5, HIGH) — accept a name-only (USB/CUPS) bar printer,
     // not just an IP. The gate required printer_bar_ip, so on a name-only setup
@@ -222,7 +234,7 @@ async function autoPrintIncomingTakeaway(payload, opts = {}) {
       printAlerts.recordFailure({ kind: 'bar', printer: { name: 'Bar', ip: null }, order: printOrder, items: barItems, reason: 'no bar printer configured' });
     }
     if (barItems.length && (settings.printer_bar_ip || settings.printer_bar_name)) {
-      printService.printBarTicket(settings, printOrder, barItems)
+      await printService.printBarTicket(settings, printOrder, barItems)
         .then(() => console.log(`🍹 [cloud-relay] bar ticket auto-printed for ${opts.qr ? 'QR order' : 'takeaway'} #${payload.id}`))
         .catch(err => printAlerts.recordFailure({ kind: 'bar', printer: { name: 'Bar', ip: settings.printer_bar_ip }, order: printOrder, items: barItems, reason: err.message }));
     }

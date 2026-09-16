@@ -164,7 +164,8 @@ Against a **typical rented EPOS** (always generic — never name a brand with a 
 | Professional | £89/month | + Zero-commission bookings + takeaway |
 | Growth | £179/month | + AI inventory + profit intelligence |
 | **Founder's Rate** | **£59/month** | Professional, early-client price — the offer to lead with |
-| Website Service | £5/month | Website + hosting + their own domain, wired to the till (build quoted case by case) |
+| Website Service | £5/month | Website + hosting + their own domain, wired to the till |
+| Website design (one-off) | **£200** | The build itself — PUBLIC on siamepos.co.uk since 2026-09-14 (Korakot). Supersedes "quoted case by case". |
 | Social Media Service | £39/month | 8–12 FB+IG posts/mo, £59 setup (waived with EPOS), 3-mo min, −£10/mo bundled |
 
 ### ⛔ NO FREE TRIAL — discontinued 2026-07-17 (Korakot)

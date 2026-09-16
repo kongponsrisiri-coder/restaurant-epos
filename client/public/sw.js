@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v177'; // v177: v1.9.58 — tips split by cash/card on the Z
+const CACHE_NAME = 'siamepos-shell-v179'; // v179: v1.9.60 — check-back per course, customer on order, day-closed guard, reprint deposit, online-ordering switch
 const APP_SHELL = [
   '/',
   '/index.html',

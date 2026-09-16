@@ -14,6 +14,7 @@ import { roomSize } from '../utils/floorRoom';    // SEPOS-FLOOR-FIT shared room
 import TakeawayStrip    from '../components/TakeawayStrip';
 import ReprintBillsModal from '../components/ReprintBillsModal';
 import BillPeek         from '../components/BillPeek';
+import { useDayClosedGuard } from '../components/DayClosedGuard';   // SEPOS-ZCLOSE-GUARD-001
 import SyncHealthBanner from '../components/SyncHealthBanner';
 
 // Previous colour code (restored per operator request) — kept with the new
@@ -32,6 +33,9 @@ const COLOUR_MAP = {
 };
 
 export default function TableMapScreen({ staff, onOpenOrder }) {
+  // SEPOS-ZCLOSE-GUARD-001 — a NEW sale after today's End of Day needs a
+  // manager PIN + warning (it starts a new shift and changes printed figures).
+  const { guard: dayGuard, guardModal: dayGuardModal } = useDayClosedGuard();
   const [tables, setTables] = useState([]);
   const [tableStatuses, setTableStatuses] = useState([]);
   const [openOrders, setOpenOrders] = useState([]);
@@ -166,6 +170,15 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
     return COLOUR_MAP[status.colour_status] || COLOUR_MAP.occupied;
   };
 
+  // SEPOS-CHECKBACK-001 — ✓ when the course the table is on has been checked back
+  // (tables/status carries the orders.* columns, incl. checkback_*_at).
+  const getCheckback = (table) => {
+    const st = tableStatuses.find(s => s.table_id === table.id);
+    if (!st) return null;
+    const key = { starters_done: 'checkback_starters_at', mains_done: 'checkback_mains_at', desserts_done: 'checkback_desserts_at' }[st.colour_status];
+    return key && st[key] ? st[key] : null;
+  };
+
   const getTableTime = (tableId) => {
     const order = orderForTable(openOrders, tableId);
     if (!order) return null;
@@ -247,19 +260,27 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
       // SEPOS-TAKEAWAY-TABLE — no covers prompt; ring straight into a takeaway
       // order (order_type='takeaway' → skips service charge, kitchen labels it).
       if (creatingRef.current) return;         // SEPOS-GHOST-001 — ignore double-tap
-      creatingRef.current = true; setCreating(true);
-      try {
-        const data = await createOrder(table.id, 1, staff?.id, 'takeaway');
-        if (!data?.id) throw new Error(data?.error || 'No order id returned');
-        onOpenOrder(data.id, table.id);
-      } catch (err) {
-        alert(`Failed to start takeaway: ${err.message || 'please try again'}`);
-      } finally {
-        creatingRef.current = false; setCreating(false);
-      }
+      // SEPOS-ZCLOSE-GUARD-001 — new sale after End of Day → manager PIN first
+      dayGuard(async () => {
+        if (creatingRef.current) return;
+        creatingRef.current = true; setCreating(true);
+        try {
+          const data = await createOrder(table.id, 1, staff?.id, 'takeaway');
+          if (!data?.id) throw new Error(data?.error || 'No order id returned');
+          onOpenOrder(data.id, table.id);
+        } catch (err) {
+          alert(`Failed to start takeaway: ${err.message || 'please try again'}`);
+        } finally {
+          creatingRef.current = false; setCreating(false);
+        }
+      }, { isNewSale: true });
     } else {
-      setShowCoversPopup(table);
-      setCoversInput('');
+      // SEPOS-ZCLOSE-GUARD-001 — guard BEFORE the covers pad so the warning
+      // comes first, not after the waiter has typed covers.
+      dayGuard(() => {
+        setShowCoversPopup(table);
+        setCoversInput('');
+      }, { isNewSale: true });
     }
   };
 
@@ -483,7 +504,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                   onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
                 >
                   <div style={{ fontSize: Math.max(12, Math.min(22, Math.round(w * 0.17))), fontWeight: 800, color: colours.text, textAlign: 'center', padding: '0 4px' }}>
-                    {table.is_takeaway ? '🥡 ' : ''}{tableLabel(table)}
+                    {table.is_takeaway ? '🥡 ' : ''}{tableLabel(table)}{getCheckback(table) ? ' ✓' : ''}
                   </div>
                   {time && (
                     <div style={{
@@ -622,7 +643,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                       fontSize: 10.5, fontWeight: 800, letterSpacing: '.4px',
                       textTransform: 'uppercase', borderRadius: 999, padding: '3px 9px',
                     }}>
-                      {colours.label}
+                      {colours.label}{getCheckback(table) ? ' ✓' : ''}
                     </div>
 
                     {/* Table number */}
@@ -770,6 +791,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           COVERS NUMPAD POPUP
           Added maxWidth: 90vw, bigger buttons on mobile
           ════════════════════════════════════════ */}
+      {dayGuardModal && createPortal(dayGuardModal, document.body)}
       {showCoversPopup && createPortal((
         <div style={{
           position: 'fixed', top: 0, right: 0, bottom: 0, left: 0,

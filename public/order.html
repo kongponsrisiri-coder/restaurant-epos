@@ -124,6 +124,15 @@
       ]);
       twSet = tw;
       S.name = settings.company_name || settings.restaurant_name || 'Order online';
+      // SEPOS-ONLINE-TOGGLE-001 — belt and braces: the server already serves a
+      // notice page when paused, but a cached copy of this page must not show
+      // an orderable menu either.
+      if (tw && tw.online_ordering_enabled === false) {
+        document.documentElement.style.setProperty('--brand', settings.brand_primary || '#1E4038');
+        const ph = (settings.company_phone || '').trim();
+        $('#app').innerHTML = '<div style="text-align:center;padding:48px 20px;max-width:440px;margin:0 auto"><h1 style="color:var(--brand);font-size:22px;margin:0 0 6px">' + esc(S.name) + '</h1><div style="font-size:40px;line-height:1">⏸</div><h2 style="font-size:18px;margin:14px 0 8px">Online ordering is paused right now</h2><p style="color:#444">We\'re not taking online orders at the moment.</p>' + (ph ? '<p>Please call us on <a href="tel:' + esc(ph.replace(/\s+/g, '')) + '" style="color:var(--brand);font-weight:700;text-decoration:none">' + esc(ph) + '</a></p>' : '') + '<p style="font-size:13px;color:#888;margin-top:16px">Please check back later — thank you for your patience.</p></div>';
+        return;
+      }
       S.currency = settings.currency_symbol || '£';
       S.brand = settings.brand_primary || '#1E4038';
       document.documentElement.style.setProperty('--brand', S.brand);

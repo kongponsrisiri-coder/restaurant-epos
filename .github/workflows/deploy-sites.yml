@@ -15,13 +15,17 @@
 # it is the allowlisted main-cloud host in api.js.
 
 name: Deploy sites
+# SEPOS-HOSTING-002 (Korakot, 2026-09-11) — deploy on RELEASE TAGS, not every push.
+# The old trigger (any push to client/**) re-deployed all 11 sites PER COMMIT, and
+# on Netlify's credit model each production deploy costs credits — a heavy dev day
+# (e.g. the 11 Sep Android build work) fanned out to ~90-100 deploys/day and drove
+# the Sep credit spike. Releases are the natural "ship the client changes" moment;
+# workflow_dispatch covers any off-cycle deploy. NB 'v*' matches version tags
+# (v1.9.57) but NOT the app-only tags tablet-v* / host-v*.
 on:
   push:
-    branches: [main]
-    paths:
-      - 'client/**'
-      - 'back-office/client/**'
-      - '.github/workflows/deploy-sites.yml'
+    tags:
+      - 'v*'
   workflow_dispatch: {}
 
 concurrency:

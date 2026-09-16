@@ -810,28 +810,96 @@ function buildTestPage(info = {}) {
 
 let _printQueue = Promise.resolve();
 
-// 2s timeout: a printer on the same LAN answers in milliseconds, so a
+// 2s connect timeout: a printer on the same LAN answers in milliseconds, so a
 // longer wait only delays the LPR fallback when the device is LPR-only
 // or the connect packet is dropped.
-function _sendTcp(ip, port, buf, timeoutMs = 2000) {
+//
+// SEPOS-PRINT-PACING-001 (Baanrai, 16 Sep) — the old version resolved 800 ms
+// after connect and DESTROYED the socket, whatever had actually left the
+// machine. A long rendered ticket (online order: 2 copies + customer block)
+// on a slow link was cut mid-raster → the printer had already been told the
+// image height and fed the rest as a BLANK strip; the till reported success.
+// Now: write in paced 4 KB chunks, honour back-pressure, end the socket only
+// once every byte is handed over and flushed, and treat a close / error /
+// stall BEFORE the last byte as a failure — retried ONCE after 600 ms (mid-send
+// only; a connect refusal still falls through to LPR as before). A second
+// failure rejects so the caller's printAlerts.recordFailure surfaces it.
+const _TCP_CHUNK = 4096;
+const _TCP_CHUNK_GAP_MS = 15;
+const _TCP_DRAIN_TIMEOUT_MS = 8000;
+const _TCP_RETRY_DELAY_MS = 600;
+
+function _sendTcpOnce(ip, port, buf, timeoutMs) {
   return new Promise((resolve, reject) => {
     const sock = new net.Socket();
     let settled = false;
-    const done = (err) => {
+    let connected = false;
+    let sent = 0;
+    const total = buf.length;
+    const finish = (err) => {
       if (settled) return;
       settled = true;
       sock.destroy();
       setTimeout(() => err ? reject(err) : resolve(), 1500);
     };
+    const fail = (message) => {
+      const e = new Error(message);
+      e.midSend = connected;      // true → the retry branch in _sendTcp
+      finish(e);
+    };
     sock.setTimeout(timeoutMs);
-    sock.connect(parseInt(port, 10) || 9100, ip, () => {
-      sock.write(buf, (err) => { if (err) return done(err); });
-      sock.once('drain', () => setTimeout(() => done(null), 600));
-      setTimeout(() => done(null), 800);
+    sock.on('error', (e) => {
+      // Every byte already handed to the kernel and the peer reset on our
+      // close — the job most likely printed; do not retry (= duplicate ticket).
+      if (connected && sent >= total) { console.warn(`[print] ${ip}: late socket error after full send (${e.message}) — treating as sent`); return finish(null); }
+      e.midSend = connected;
+      finish(e);
     });
-    sock.on('error',   (e) => done(e));
-    sock.on('timeout', ()  => done(new Error(`Printer at ${ip} timed out`)));
+    sock.on('timeout', () => fail(connected
+      ? `Printer at ${ip} stalled after ${sent}/${total} bytes`
+      : `Printer at ${ip} timed out`));
+    sock.on('close', () => {
+      if (settled) return;
+      if (sent >= total) return finish(null);
+      fail(`Printer at ${ip} closed the connection after ${sent}/${total} bytes`);
+    });
+    sock.connect(parseInt(port, 10) || 9100, ip, () => {
+      connected = true;
+      sock.setTimeout(_TCP_DRAIN_TIMEOUT_MS);   // a slow drain is not a dead printer
+      const writeNext = () => {
+        if (settled) return;
+        if (sent >= total) {
+          // FIN only after the last chunk is flushed; the 'finish' callback
+          // means the OS accepted everything we wrote.
+          sock.end(() => finish(null));
+          return;
+        }
+        const chunk = buf.subarray(sent, Math.min(sent + _TCP_CHUNK, total));
+        const ok = sock.write(chunk, (err) => { if (err) fail(err.message); });
+        sent += chunk.length;
+        if (ok) setTimeout(writeNext, _TCP_CHUNK_GAP_MS);
+        else sock.once('drain', () => setTimeout(writeNext, _TCP_CHUNK_GAP_MS));
+      };
+      writeNext();
+    });
   });
+}
+
+async function _sendTcp(ip, port, buf, timeoutMs = 2000) {
+  try {
+    return await _sendTcpOnce(ip, port, buf, timeoutMs);
+  } catch (firstErr) {
+    if (!firstErr.midSend) throw firstErr;   // never reached the printer → LPR fallback as before
+    console.warn(`[print] RAW ${ip}:${port} dropped mid-send (${firstErr.message}) — retrying once in ${_TCP_RETRY_DELAY_MS} ms`);
+    await new Promise((r) => setTimeout(r, _TCP_RETRY_DELAY_MS));
+    try {
+      return await _sendTcpOnce(ip, port, buf, timeoutMs);
+    } catch (secondErr) {
+      const e = new Error(`Printer at ${ip} dropped the job twice (${firstErr.message}; retry: ${secondErr.message}) — ticket NOT printed`);
+      e.midSend = true;
+      throw e;
+    }
+  }
 }
 
 // LPR / LPD (RFC 1179) — port 515.
@@ -1631,4 +1699,5 @@ module.exports = {
   buildFireNotice,        // SEPOS-ANDROID-001 — native fire-notice buffer
   buildKitchenMessage,    // SEPOS-ANDROID-001 — native kitchen-message buffer
   printReportText,        // SEPOS-REPORTS-001 — admin report ESC/POS
+  sendRaw,                // SEPOS-PRINT-PACING-001 — exposed for the fake-printer harness
 };

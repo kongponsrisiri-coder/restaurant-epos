@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote, getVoucher, redeemVoucher, getOrderDeposit, getOrderDepositApplied, createDeposit } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote, getVoucher, redeemVoucher, getOrderDeposit, getOrderDepositApplied, createDeposit, markCourseArrived, checkbackCourse, setOrderCustomer, lookupCustomers } from '../api';
 import AmountInput from '../components/AmountInput';
 import { unapplyOrderDeposit, pushCfdState, moveOrderItem, getTables } from '../api';
 import CodeScanButton from '../components/CodeScanButton';
@@ -78,6 +78,9 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   const [movePopup, setMovePopup] = useState(null);   // SEPOS-ITEM-MOVE-001 — {item, tables}
   // SEPOS-ITEM-NOTE-TAP-001 — tap an unsent basket line to add/edit its note.
   const [noteModal, setNoteModal] = useState(null);   // { line, text }
+  // SEPOS-CHECKBACK-001 / SEPOS-CUSTOMER-ORDER-001
+  const [checkbackBusy, setCheckbackBusy] = useState(null);   // course number while a tap is in flight
+  const [customerModal, setCustomerModal] = useState(null); // { q, results, name, phone, email }
   // SEPOS-RESEND-002 — order-level resend: tick items, default plain Reprint.
   const [resendAllModal, setResendAllModal] = useState(null); // { items, ticked:Set, reason }
   const [showBill, setShowBill] = useState(false);
@@ -670,6 +673,44 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
       if (allVoided || isEmpty) await payOrder(orderId, 0, 'cancelled');
     }
     onClose();
+  };
+
+  // SEPOS-CHECKBACK-001 — "Arrived" marks the course served (existing floor
+  // colours), "Checked back" stamps the check-back time. Tap again to clear.
+  const CHECKBACK_KEY = { 1: 'checkback_starters_at', 2: 'checkback_mains_at', 3: 'checkback_desserts_at' };
+  const handleCourseArrived = async (course) => {
+    setCheckbackBusy(course);
+    try { assertOk(await markCourseArrived(orderId, course)); await fetchOrder(); }
+    catch (e) { alert(`Could not mark ${COURSE_LABELS[course]} as arrived — ${e.message}`); }
+    finally { setCheckbackBusy(null); }
+  };
+  const handleCheckback = async (course, clear = false) => {
+    setCheckbackBusy(course);
+    try { assertOk(await checkbackCourse(orderId, course, clear)); await fetchOrder(); }
+    catch (e) { alert(`Could not save the check-back — ${e.message}`); }
+    finally { setCheckbackBusy(null); }
+  };
+
+  // SEPOS-CUSTOMER-ORDER-001 — pick / type the customer this bill belongs to.
+  const openCustomerModal = () => setCustomerModal({
+    q: '', results: [],
+    name: order?.customer_name || '', phone: order?.customer_phone || '', email: order?.customer_email || '',
+  });
+  const customerSearch = async (q) => {
+    setCustomerModal(m => m ? { ...m, q } : m);
+    if (q.trim().length < 2) { setCustomerModal(m => m ? { ...m, results: [] } : m); return; }
+    try { const r = await lookupCustomers(q.trim()); setCustomerModal(m => m ? { ...m, results: Array.isArray(r) ? r : [] } : m); }
+    catch { /* offline lookup — typing still works */ }
+  };
+  const saveCustomer = async (c) => {
+    const payload = c || { customer_name: customerModal.name, customer_phone: customerModal.phone, customer_email: customerModal.email };
+    if (!String(payload.customer_name || '').trim() && !String(payload.customer_phone || '').trim()) { alert('Enter at least a name or a phone number.'); return; }
+    try { assertOk(await setOrderCustomer(orderId, payload)); setCustomerModal(null); await fetchOrder(); }
+    catch (e) { alert(`Could not save the customer — ${e.message}`); }
+  };
+  const clearCustomer = async () => {
+    try { assertOk(await setOrderCustomer(orderId, { customer_name: null, customer_phone: null, customer_email: null })); setCustomerModal(null); await fetchOrder(); }
+    catch (e) { alert(`Could not clear the customer — ${e.message}`); }
   };
 
   const sendOrder = async () => {
@@ -1547,8 +1588,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {dineTableLabel(order)}
                   </div>
-                  <div style={{ fontSize: 12, color: '#888', marginTop: 1 }}>
-                    Order #{orderId}{order?.covers ? ` · ${order.covers} covers` : ''}
+                  <div style={{ fontSize: 12, color: '#888', marginTop: 1, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span>Order #{orderId}{order?.covers ? ` · ${order.covers} covers` : ''}</span>
+                    {/* SEPOS-CUSTOMER-ORDER-001 — who this bill belongs to */}
+                    <button onClick={openCustomerModal} title="Attach a customer to this bill (for the customer list and spend)"
+                      style={{ background: order?.customer_name ? '#eef2ff' : '#f3f4f6', color: order?.customer_name ? '#3730a3' : '#555', border: 'none', borderRadius: 999, padding: '3px 10px', cursor: 'pointer', fontWeight: 700, fontSize: 11 }}>
+                      👤 {order?.customer_name ? order.customer_name : 'Customer'}
+                    </button>
                   </div>
                 </div>
                 {cart.length > 0 && (
@@ -1565,7 +1611,14 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                   <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Order · {dineTableLabel(order)}</span>
-                  <span style={{ fontSize: 13, color: '#9A9488', fontWeight: 600 }}>{existingItems.filter(i => !i.voided).reduce((s, i) => s + (i.quantity || 0), 0) + cart.reduce((s, c) => s + (c.quantity || 0), 0)} items</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {/* SEPOS-CUSTOMER-ORDER-001 — who this bill belongs to (desktop layout) */}
+                    <button onClick={openCustomerModal} title="Attach a customer to this bill (for the customer list and spend)"
+                      style={{ background: order?.customer_name ? '#eef2ff' : '#f3f4f6', color: order?.customer_name ? '#3730a3' : '#555', border: 'none', borderRadius: 999, padding: '4px 10px', cursor: 'pointer', fontWeight: 700, fontSize: 12, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      👤 {order?.customer_name ? order.customer_name : 'Customer'}
+                    </button>
+                    <span style={{ fontSize: 13, color: '#9A9488', fontWeight: 600 }}>{existingItems.filter(i => !i.voided).reduce((s, i) => s + (i.quantity || 0), 0) + cart.reduce((s, c) => s + (c.quantity || 0), 0)} items</span>
+                  </span>
                 </div>
                 {/* Course selector — moved here from the left menu (mockup). */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
@@ -1755,6 +1808,37 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       }} />
                       {COURSE_LABELS[course]}
                     </div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    {/* SEPOS-CHECKBACK-001 — after the course is called: Arrived → Checked back */}
+                    {(() => {
+                      const c = Number(course);
+                      const key = CHECKBACK_KEY[c];
+                      const kitchenFired = fired.filter(i => !i.is_bar);
+                      if (!key || kitchenFired.length === 0) return null;
+                      const allServed = kitchenFired.every(i => i.status === 'served');
+                      const stamp = order?.[key];
+                      const busy = checkbackBusy === c;
+                      if (!allServed) return (
+                        <button onClick={() => handleCourseArrived(c)} disabled={busy}
+                          title={`All ${COURSE_LABELS[course]} on the table`}
+                          style={{ background: 'white', color: COURSE_COLORS[course] || '#555', border: `1.5px solid ${COURSE_COLORS[course] || '#999'}`, borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
+                          {busy ? '...' : '🍽️ Arrived'}
+                        </button>
+                      );
+                      if (!stamp) return (
+                        <button onClick={() => handleCheckback(c)} disabled={busy}
+                          title="Everything fine with the table? Tap to record the check-back"
+                          style={{ background: '#16a34a', color: 'white', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
+                          {busy ? '...' : '✓ Check back'}
+                        </button>
+                      );
+                      return (
+                        <button onClick={() => { if (window.confirm('Clear this check-back?')) handleCheckback(c, true); }} disabled={busy}
+                          style={{ background: '#dcfce7', color: '#166534', border: 'none', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', fontWeight: 700, fontSize: 11 }}>
+                          ✓ Checked {new Date(stamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                        </button>
+                      );
+                    })()}
                     {unfired.length > 0 && (
                       <button
                         onClick={() => handleFireCourse(Number(course))}
@@ -1767,6 +1851,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                         {firingCourse === Number(course) ? '...' : `🔥 Call ${COURSE_LABELS[course]}`}
                       </button>
                     )}
+                    </div>
                   </div>
 
                   {/* PENDING / UNFIRED items */}
@@ -2495,6 +2580,43 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
 
         {/* RESEND POPUP (SEPOS-024) */}
         {/* SEPOS-ITEM-NOTE-TAP-001 — note modal for a tapped basket line */}
+        {/* SEPOS-CUSTOMER-ORDER-001 — customer picker */}
+        {customerModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: 20 }}>
+            <div style={{ background: 'white', borderRadius: 14, padding: 22, width: 'min(440px, 100%)', maxHeight: '88vh', overflowY: 'auto' }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--brand-primary,#0D1B3E)', marginBottom: 4 }}>👤 Customer for this bill</div>
+              <div style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>Search a known guest, or type a new one. Their spend is tracked on the Customers tab.</div>
+              <input autoFocus value={customerModal.q} onChange={e => customerSearch(e.target.value)} placeholder="Search name, phone or email…"
+                style={{ width: '100%', padding: 10, borderRadius: 10, border: '1.5px solid #ddd', fontSize: 15, boxSizing: 'border-box' }} />
+              {customerModal.results.length > 0 && (
+                <div style={{ border: '1px solid #eee', borderRadius: 10, marginTop: 8, overflow: 'hidden' }}>
+                  {customerModal.results.map((r, i) => (
+                    <div key={i} onClick={() => saveCustomer({ customer_name: r.customer_name, customer_phone: r.customer_phone, customer_email: r.customer_email })}
+                      style={{ padding: '10px 12px', borderBottom: '1px solid #f3f3f3', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                      <span style={{ fontWeight: 700 }}>{r.customer_name}</span>
+                      <span style={{ color: '#888', fontSize: 12 }}>{r.customer_phone || r.customer_email || ''}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: '#999', margin: '14px 0 6px', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>Or enter details</div>
+              <input value={customerModal.name} onChange={e => setCustomerModal(m => ({ ...m, name: e.target.value }))} placeholder="Name"
+                style={{ width: '100%', padding: 10, borderRadius: 10, border: '1.5px solid #ddd', fontSize: 15, boxSizing: 'border-box', marginBottom: 8 }} />
+              <input value={customerModal.phone} onChange={e => setCustomerModal(m => ({ ...m, phone: e.target.value }))} placeholder="Phone" inputMode="tel"
+                style={{ width: '100%', padding: 10, borderRadius: 10, border: '1.5px solid #ddd', fontSize: 15, boxSizing: 'border-box', marginBottom: 8 }} />
+              <input value={customerModal.email} onChange={e => setCustomerModal(m => ({ ...m, email: e.target.value }))} placeholder="Email (optional)" inputMode="email"
+                style={{ width: '100%', padding: 10, borderRadius: 10, border: '1.5px solid #ddd', fontSize: 15, boxSizing: 'border-box' }} />
+              <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                <button onClick={() => setCustomerModal(null)} style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700 }}>Cancel</button>
+                {order?.customer_name && (
+                  <button onClick={clearCustomer} style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: '#fee2e2', color: '#ef4444', cursor: 'pointer', fontWeight: 700 }}>Remove</button>
+                )}
+                <button onClick={() => saveCustomer()} style={{ flex: 2, padding: '11px', borderRadius: 10, border: 'none', background: 'var(--brand-primary,#0D1B3E)', color: 'white', cursor: 'pointer', fontWeight: 700 }}>Save customer</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {noteModal && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: 20 }}>
             <div style={{ background: 'white', borderRadius: 14, padding: 22, width: 'min(420px, 100%)' }}>

@@ -333,6 +333,32 @@ async function ping() {
   }
 }
 
+// SEPOS-SYNC-TIMESTAMP-001 — when a queued action finally drains (seconds or
+// a week later), send the till's ORIGINAL timestamps so the cloud's copy is
+// dated when the sale actually happened, not when the push landed. Read at
+// drain time from the local row (the local row is authoritative and already
+// carries the final values; SQLite rows come back as ISO 8601 UTC). Never
+// blocks a push: any read error just omits the field → cloud falls back to
+// NOW() (the old behaviour).
+async function localOrderTimes(localOrderId) {
+  try {
+    const r = await pool.query('SELECT opened_at, created_at, closed_at FROM orders WHERE id = $1', [localOrderId]);
+    const o = r.rows[0] || {};
+    const iso = (v) => { if (!v) return undefined; const d = new Date(v); return isNaN(d.getTime()) ? undefined : d.toISOString(); };
+    return { opened_at: iso(o.opened_at) || iso(o.created_at), closed_at: iso(o.closed_at) };
+  } catch { return {}; }
+}
+async function localCourseFiredAt(localOrderId, course) {
+  try {
+    const r = await pool.query(
+      'SELECT MIN(fired_at) AS fired_at FROM order_items WHERE order_id = $1 AND course = $2 AND is_fired = 1 AND fired_at IS NOT NULL',
+      [localOrderId, course]);
+    const v = r.rows[0] && r.rows[0].fired_at;
+    if (!v) return undefined;
+    const d = new Date(v); return isNaN(d.getTime()) ? undefined : d.toISOString();
+  } catch { return undefined; }
+}
+
 async function applyToCloud(actionType, payload) {
   const url = (path) => CLOUD_API_URL + path;
   const json = (body) => ({
@@ -351,12 +377,14 @@ async function applyToCloud(actionType, payload) {
       // staff_id NULL, so counter/takeaway orders lost their 🥡 flow and
       // staff attribution — and the corruption round-tripped: the next
       // pullActiveOrders cloud-wins UPDATE flipped the LOCAL row to dine_in.
+      const times = await localOrderTimes(payload.localOrderId); // SEPOS-SYNC-TIMESTAMP-001
       const r = await fetch(url('/api/orders'), {
         method: 'POST', ...json({
           table_id:   payload.table_id,
           covers:     payload.covers,
           staff_id:   payload.staff_id,
           order_type: payload.order_type,
+          opened_at:  times.opened_at,
         }),
       });
       if (!r.ok) throw new Error(`create_order ${r.status}`);
@@ -387,21 +415,23 @@ async function applyToCloud(actionType, payload) {
     }
     case 'pay_order': {
       const cloudId = await requireOrderCloudId('pay_order', payload.localOrderId);
+      const { closed_at } = await localOrderTimes(payload.localOrderId); // SEPOS-SYNC-TIMESTAMP-001
       const r = await fetch(url(`/api/orders/${cloudId}/pay`), {
         // SEPOS-062 — forward the per-tender split breakdown when present so the
         // cloud records the same Cash/Card rows the till did.
         // SEPOS-TIPS-001 — forward the tip so the cloud row carries it too.
         method: 'POST', ...json(payload.payments
-          ? { payments: payload.payments, tip: payload.tip }
-          : { amount: payload.amount, method: payload.method, tip: payload.tip }),
+          ? { payments: payload.payments, tip: payload.tip, closed_at }
+          : { amount: payload.amount, method: payload.method, tip: payload.tip, closed_at }),
       });
       if (!r.ok) throw new Error(`pay_order ${r.status}`);
       return r.json();
     }
     case 'fire_course': {
       const cloudId = await requireOrderCloudId('fire_course', payload.localOrderId);
+      const fired_at = await localCourseFiredAt(payload.localOrderId, payload.course); // SEPOS-SYNC-TIMESTAMP-001
       const r = await fetch(url(`/api/orders/${cloudId}/fire-course/${payload.course}`), {
-        method: 'PUT', ...json({}),
+        method: 'PUT', ...json(fired_at ? { fired_at } : {}),
       });
       if (!r.ok) throw new Error(`fire_course ${r.status}`);
       return r.json();
@@ -643,7 +673,8 @@ async function applyToCloud(actionType, payload) {
     }
     case 'close_zero': {
       const cloudId = await requireOrderCloudId('close_zero', payload.localOrderId);
-      const r = await fetch(url(`/api/orders/${cloudId}/close-zero`), { method: 'POST', ...json({}) });
+      const { closed_at } = await localOrderTimes(payload.localOrderId); // SEPOS-SYNC-TIMESTAMP-001
+      const r = await fetch(url(`/api/orders/${cloudId}/close-zero`), { method: 'POST', ...json(closed_at ? { closed_at } : {}) });
       // 409 = already closed on cloud (someone else closed it) — done.
       if (r.status === 409) return { alreadyClosed: true };
       if (!r.ok) throw new Error(`close_zero ${r.status}`);
@@ -651,8 +682,9 @@ async function applyToCloud(actionType, payload) {
     }
     case 'cancel_order': {
       const cloudId = await requireOrderCloudId('cancel_order', payload.localOrderId);
+      const { closed_at } = await localOrderTimes(payload.localOrderId); // SEPOS-SYNC-TIMESTAMP-001
       const r = await fetch(url(`/api/orders/${cloudId}/pay`), {
-        method: 'POST', ...json({ amount: 0, method: 'cancelled' }),
+        method: 'POST', ...json({ amount: 0, method: 'cancelled', closed_at }),
       });
       if (r.status === 409) return { alreadyClosed: true };
       if (!r.ok) throw new Error(`cancel_order ${r.status}`);

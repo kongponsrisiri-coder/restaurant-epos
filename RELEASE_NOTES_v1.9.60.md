@@ -1,6 +1,6 @@
-# SiamEPOS v1.9.60 — What's new
+# SiamEPOS v1.9.60 / v1.9.61 — What's new
 
-*Released 16 September 2026*
+*Released 16–17 September 2026*
 
 ## Table check-back
 After you call a course, the order screen now shows **🍽️ Arrived** — tap it when the food is on the table. It then turns into **✓ Check back** — tap that once you've asked the table if everything is fine. The table on the floor map shows a **✓** so the whole team can see which tables have been checked. Works for starters, mains and desserts. Tap the stamp again to undo.
@@ -14,6 +14,9 @@ Admin → Settings → **Online Ordering ON/OFF**. Turn it off on a night you ca
 ## After you've closed the day
 Once the End of Day report is printed, ringing a new sale or changing a closed bill now asks for a **manager PIN** and warns that the printed report will no longer match. Stops the "my Z doesn't match" surprise.
 
+## Remote support (v1.9.61, Windows tills)
+The till now sets up SiamEPOS remote support by itself the first time it starts after this update — Windows will ask once to allow it (click **Yes**). From then on, when you call us, we can see your screen and fix things without a visit; a notice shows on the till while we're connected. You'll find the details under Admin → Settings → **Remote support**. Share them only with SiamEPOS.
+
 ## Fixes
 - **Reprinted bills** now show the booking deposit and balance due, exactly like the original bill.
 - **Kitchen tickets for online orders** are sent more gently to the printer and retried once if the printer drops the connection — no more blank tickets on a busy printer. If it still can't print, the till shows a print alert instead of staying silent.
@@ -21,7 +24,7 @@ Once the End of Day report is printed, ringing a new sale or changing a closed b
 - Website-chat and new-lead text alerts to you now actually send.
 
 ## What you need to do
-- **Desktop till:** restart the app once (it updates itself on restart). If you use a second screen or tablets, restart those too.
+- **Desktop till:** restart the app once (it updates itself on restart). On Windows, click **Yes** when it asks to allow remote support. If you use a second screen or tablets, restart those too.
 - **Tablets / browser tills:** refresh the page once.
 - Nothing else — your menu, tables and settings are untouched.
 
@@ -41,6 +44,9 @@ Admin → Settings → **Online Ordering ON/OFF** คืนไหนรับไ
 ## หลังปิดยอดวัน
 เมื่อพิมพ์รายงาน End of Day แล้ว การเปิดออเดอร์ใหม่หรือแก้บิลที่ปิดแล้วจะขอ **PIN ผู้จัดการ** และเตือนว่ารายงานที่พิมพ์ไปจะไม่ตรงกับตัวเลขใหม่ ป้องกันปัญหา "ยอด Z ไม่ตรง"
 
+## รีโมตซัพพอร์ต (เวอร์ชัน 1.9.61 เครื่อง Windows)
+เครื่องแคชเชียร์จะตั้งค่ารีโมตซัพพอร์ตของ SiamEPOS ให้เองเมื่อเปิดครั้งแรกหลังอัปเดต — Windows จะถามอนุญาตหนึ่งครั้ง (กด **Yes**) จากนั้นเมื่อโทรหาเรา เราจะเห็นหน้าจอและแก้ปัญหาได้โดยไม่ต้องไปที่ร้าน ระหว่างเชื่อมต่อจะมีข้อความแจ้งบนจอ ดูรายละเอียดได้ที่ Admin → Settings → **Remote support** แชร์ข้อมูลนี้กับ SiamEPOS เท่านั้น
+
 ## แก้ไข
 - **พิมพ์บิลซ้ำ** แสดงมัดจำและยอดคงเหลือเหมือนบิลต้นฉบับ
 - **ตั๋วครัวของออเดอร์ออนไลน์** ส่งไปเครื่องพิมพ์แบบนุ่มนวลขึ้นและลองใหม่อัตโนมัติหนึ่งครั้งถ้าเครื่องพิมพ์หลุด — ไม่มีตั๋วเปล่าอีก ถ้ายังพิมพ์ไม่ได้ เครื่องจะแจ้งเตือนแทนที่จะเงียบ
@@ -48,6 +54,6 @@ Admin → Settings → **Online Ordering ON/OFF** คืนไหนรับไ
 - ข้อความแจ้งเตือนแชทเว็บไซต์และลูกค้าใหม่ส่งถึงคุณแล้ว
 
 ## สิ่งที่ต้องทำ
-- **เครื่องแคชเชียร์:** ปิดแล้วเปิดแอปใหม่หนึ่งครั้ง (อัปเดตอัตโนมัติตอนเปิด) ถ้ามีจอที่สองหรือแท็บเล็ต ให้เปิดใหม่ด้วย
+- **เครื่องแคชเชียร์:** ปิดแล้วเปิดแอปใหม่หนึ่งครั้ง (อัปเดตอัตโนมัติตอนเปิด) บน Windows กด **Yes** เมื่อถามอนุญาตรีโมตซัพพอร์ต ถ้ามีจอที่สองหรือแท็บเล็ต ให้เปิดใหม่ด้วย
 - **แท็บเล็ต / เบราว์เซอร์:** รีเฟรชหน้าหนึ่งครั้ง
 - แค่นั้น — เมนู โต๊ะ และการตั้งค่าไม่เปลี่ยน

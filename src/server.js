@@ -5161,6 +5161,42 @@ app.post('/api/local/archive-run', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-ZCLOSE-GUARD-001 — has the day's End of Day already been saved?
+// Powers the manager-PIN warning before a sale / bill edit AFTER the close
+// (Yum Yum 3 Sep: a bill re-paid after the 21:53 Z made two Z prints of the
+// same day disagree). 'day' rows only count as closed; session closes are
+// reported (last_session_close_at) but do not lock. Trading day = the
+// tenant's zone (same rule the Z save uses via the client's local midnight).
+// Portable: candidates fetched + compared in JS so PG and SQLite agree.
+app.get('/api/z-report/day-status', async (req, res) => {
+  try {
+    const tz = await restaurantTz();
+    const wanted = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || ''))
+      ? String(req.query.date) : dateInZone(new Date(), tz);
+    const r = await pool.query(
+      `SELECT id, type, opened_at, closed_at, created_at FROM z_reports WHERE superseded_at IS NULL AND type IN ('day','session')`
+    );
+    const dayOf = (v) => { const d = new Date(v); return isNaN(d) ? String(v).slice(0, 10) : dateInZone(d, tz); };
+    let day = null, lastSession = null;
+    for (const row of r.rows) {
+      if (row.type === 'day') {
+        if (dayOf(row.opened_at) === wanted && (!day || new Date(row.created_at) > new Date(day.created_at))) day = row;
+      } else if (dayOf(row.closed_at || row.created_at) === wanted) {
+        const t = row.created_at || row.closed_at;
+        if (!lastSession || new Date(t) > new Date(lastSession)) lastSession = t;
+      }
+    }
+    res.json({
+      date: wanted,
+      closed: !!day,
+      closed_at: day ? (day.created_at || day.closed_at) : null,
+      type: day ? 'day' : (lastSession ? 'session' : null),
+      by: null,   // z_reports carries no staff column — reserved for a future audit field
+      last_session_close_at: lastSession,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/z-report/history', async (req, res) => {
   try {
     // SEPOS-Z-REPLACE — superseded rows (replaced by a re-run) stay in the DB

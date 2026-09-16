@@ -807,6 +807,7 @@ export const getZReportPreview = (from, to) => get(`/api/z-report/preview?from=$
 export const saveZReport = (type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, actual_card, card_difference) =>
   post('/api/z-report/save', { type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, actual_card, card_difference });
 export const getZReportHistory = () => get('/api/z-report/history');
+export const getZReportDayStatus = (date) => get(`/api/z-report/day-status${date ? `?date=${encodeURIComponent(date)}` : ''}`);   // SEPOS-ZCLOSE-GUARD-001
 // SEPOS-053 — till sessions (EposNow-style Open Shift → Close Shift)
 export const getZReportPreviewBySession = (sessionId) => get(`/api/z-report/preview?session_id=${encodeURIComponent(sessionId)}`);
 export const getCurrentSession = () => get('/api/till-sessions/current');

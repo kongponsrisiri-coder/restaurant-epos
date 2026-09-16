@@ -4064,6 +4064,95 @@ app.put('/api/orders/:id/bill-printed', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── SEPOS-CHECKBACK-001 (v1.9.60, Rumwong) — waiter check-back per course ──
+// Two taps per course on the Order screen: "Arrived" marks every fired kitchen
+// item of that course served (drives the existing Starters/Mains/Desserts Done
+// floor colours), then "Checked back" stamps checkback_<course>_at so the floor
+// map shows a ✓ on the table. Both mirror to the cloud through the queue so
+// satellites and the cloud agree.
+const CHECKBACK_COL = { 1: 'checkback_starters_at', 2: 'checkback_mains_at', 3: 'checkback_desserts_at' };
+
+app.put('/api/orders/:id/course/:course/arrived', async (req, res) => {
+  try {
+    const orderId = Number(req.params.id), course = Number(req.params.course);
+    if (!CHECKBACK_COL[course]) return res.status(400).json({ error: 'course must be 1, 2 or 3' });
+    const now = new Date().toISOString();
+    const items = await pool.query(
+      `SELECT order_items.id FROM order_items
+         LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
+         LEFT JOIN categories ON categories.id = COALESCE(menu_items.category_id, order_items.dest_category_id)
+        WHERE order_items.order_id = $1 AND order_items.course = $2 AND order_items.voided = 0
+          AND order_items.is_fired = 1 AND order_items.status <> 'served'
+          AND (categories.is_bar = 0 OR categories.is_bar IS NULL)`,
+      [orderId, course]);
+    for (const it of items.rows) {
+      await pool.query(`UPDATE order_items SET status='served', served_at=$1 WHERE id=$2`, [now, it.id]);
+      io.emit('item_status_changed', { item_id: it.id, status: 'served' });
+      await offlineQueue.enqueue('update_item_status', { localItemId: Number(it.id), status: 'served' });
+    }
+    io.emit('tableStatusChanged');
+    res.json({ success: true, served: items.rows.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/orders/:id/checkback/:course', async (req, res) => {
+  try {
+    const orderId = Number(req.params.id), course = Number(req.params.course);
+    const col = CHECKBACK_COL[course];
+    if (!col) return res.status(400).json({ error: 'course must be 1, 2 or 3' });
+    // Cloud replay passes the till's stamp so both sides show the same time.
+    const at = (req.body && req.body.at && !isNaN(new Date(req.body.at))) ? new Date(req.body.at).toISOString() : new Date().toISOString();
+    const clear = !!(req.body && req.body.clear);
+    await pool.query(`UPDATE orders SET ${col} = $1 WHERE id = $2`, [clear ? null : at, orderId]);
+    io.emit('order_checkback', { order_id: orderId, course, at: clear ? null : at });
+    io.emit('tableStatusChanged');
+    await offlineQueue.enqueue('update_order_checkback', { localOrderId: orderId, course, at: clear ? null : at, clear });
+    res.json({ success: true, course, at: clear ? null : at });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── SEPOS-CUSTOMER-ORDER-001 (v1.9.60) — attach a customer to any order ──────
+// Dine-in orders now carry customer_name/phone/email like takeaway orders do,
+// so the CRM (a derived view keyed by email-or-phone) counts their spend
+// exactly instead of guessing by table + date.
+app.put('/api/orders/:id/customer', async (req, res) => {
+  try {
+    const orderId = Number(req.params.id);
+    const b = req.body || {};
+    const clean = (v, n) => (v == null ? null : String(v).trim().slice(0, n) || null);
+    const customer_name  = clean(b.customer_name, 120);
+    const customer_phone = clean(b.customer_phone, 40);
+    const customer_email = clean(b.customer_email, 160);
+    await pool.query(`UPDATE orders SET customer_name=$1, customer_phone=$2, customer_email=$3 WHERE id=$4`,
+      [customer_name, customer_phone, customer_email, orderId]);
+    io.emit('order_customer_changed', { order_id: orderId, customer_name, customer_phone, customer_email });
+    await offlineQueue.enqueue('update_order_customer', { localOrderId: orderId, customer_name, customer_phone, customer_email });
+    res.json({ success: true, customer_name, customer_phone, customer_email });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Waiter-side customer lookup (any signed-in staff): names/phones/emails already
+// known from bookings and previous orders. Small, prefix/substring match.
+app.get('/api/customers/lookup', requireStaffAuth(), async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim().toLowerCase();
+    if (q.length < 2) return res.json([]);
+    const like = `%${q}%`;
+    const r = await pool.query(
+      `SELECT customer_name, customer_phone, customer_email, MAX(seen) AS last_seen FROM (
+         SELECT customer_name, customer_phone, customer_email, reservation_date AS seen FROM reservations
+          WHERE customer_name IS NOT NULL
+         UNION ALL
+         SELECT customer_name, customer_phone, customer_email, DATE(opened_at) AS seen FROM orders
+          WHERE customer_name IS NOT NULL AND (customer_phone IS NOT NULL OR customer_email IS NOT NULL)
+       ) c
+       WHERE LOWER(COALESCE(customer_name,'')) LIKE $1 OR LOWER(COALESCE(customer_phone,'')) LIKE $1 OR LOWER(COALESCE(customer_email,'')) LIKE $1
+       GROUP BY customer_name, customer_phone, customer_email
+       ORDER BY MAX(seen) DESC LIMIT 8`, [like]);
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/tables/status', async (req, res) => {
   try {
     const ordersRes = await pool.query(`SELECT orders.*, tables.table_number, tables.id as table_id FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`);
@@ -11110,7 +11199,11 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
         ON o.status = 'closed'
        AND (
              o.reservation_id = r.id
-          OR (o.reservation_id IS NULL AND o.table_id = r.table_id AND DATE(o.opened_at) = r.reservation_date)
+          OR (o.reservation_id IS NULL AND o.table_id = r.table_id AND DATE(o.opened_at) = r.reservation_date
+              -- SEPOS-CUSTOMER-ORDER-001: an order with its OWN customer contact is
+              -- counted exactly below, never by this table+date guess
+              AND (o.customer_phone IS NULL OR TRIM(o.customer_phone) = '')
+              AND (o.customer_email IS NULL OR TRIM(o.customer_email) = ''))
            )
       WHERE (r.customer_email IS NOT NULL AND TRIM(r.customer_email) <> '')
          OR (r.customer_phone IS NOT NULL AND TRIM(r.customer_phone) <> '')
@@ -11135,7 +11228,8 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
         MAX(DATE(opened_at)) AS last_visit,
         COALESCE(SUM(total), 0) AS total_spend
       FROM orders
-      WHERE order_type = 'takeaway'
+      WHERE status = 'closed'
+        -- SEPOS-CUSTOMER-ORDER-001: takeaway AND dine-in orders with a contact
         AND ((customer_email IS NOT NULL AND TRIM(customer_email) <> '')
           OR (customer_phone IS NOT NULL AND TRIM(customer_phone) <> ''))
       GROUP BY COALESCE(NULLIF(LOWER(TRIM(customer_email)), ''), 'p:' || NULLIF(TRIM(customer_phone), ''))

@@ -181,7 +181,7 @@ async function ordersWithPendingPush() {
        AND action_type IN ('create_order','add_items','fire_course','pay_order','delete_order',
                            'apply_discount','update_order_flags','move_order','merge_orders',
                            'resend_items','close_zero','cancel_order','takeaway_status',
-                           'amend_method','edit_payment')`
+                           'amend_method','edit_payment','update_order_checkback','update_order_customer')`
     );
     const orderIds = new Set();
     for (const row of r.rows) {
@@ -589,6 +589,26 @@ async function applyToCloud(actionType, payload) {
         if (!r.ok) throw new Error(`update_order_flags(bill-printed) ${r.status}`);
       }
       return { ok: true };
+    }
+    case 'update_order_checkback': {
+      // SEPOS-CHECKBACK-001 — mirror the waiter's check-back stamp (or its clear)
+      // so the cloud/satellite floor map shows the same ✓ and time.
+      const cloudId = await requireOrderCloudId('update_order_checkback', payload.localOrderId);
+      const r = await fetch(url(`/api/orders/${cloudId}/checkback/${payload.course}`), {
+        method: 'PUT', ...json({ at: payload.at, clear: !!payload.clear }),
+      });
+      if (!r.ok) throw new Error(`update_order_checkback ${r.status}`);
+      return r.json();
+    }
+    case 'update_order_customer': {
+      // SEPOS-CUSTOMER-ORDER-001 — the customer picked on the till rides to the
+      // cloud so the CRM counts the bill against them.
+      const cloudId = await requireOrderCloudId('update_order_customer', payload.localOrderId);
+      const r = await fetch(url(`/api/orders/${cloudId}/customer`), {
+        method: 'PUT', ...json({ customer_name: payload.customer_name, customer_phone: payload.customer_phone, customer_email: payload.customer_email }),
+      });
+      if (!r.ok) throw new Error(`update_order_customer ${r.status}`);
+      return r.json();
     }
     case 'move_order': {
       const cloudId = await requireOrderCloudId('move_order', payload.localOrderId);

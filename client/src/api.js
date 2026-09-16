@@ -674,6 +674,12 @@ export const sendKitchenMessage   = (body) => post('/api/print/kitchen-message',
 // SEPOS-KITCHEN-MSG-002 — attach a kitchen note to the order (prints at the
 // bottom of that order's kitchen ticket). Empty note clears it.
 export const saveOrderNote        = (orderId, note) => put(`/api/orders/${orderId}/note`, { note });
+// SEPOS-CHECKBACK-001 — waiter check-back per course (1 starters / 2 mains / 3 desserts)
+export const markCourseArrived    = (orderId, course) => put(`/api/orders/${orderId}/course/${course}/arrived`, {});
+export const checkbackCourse      = (orderId, course, clear = false) => put(`/api/orders/${orderId}/checkback/${course}`, { clear });
+// SEPOS-CUSTOMER-ORDER-001 — attach a customer to an order; waiter lookup of known contacts
+export const setOrderCustomer     = (orderId, c) => put(`/api/orders/${orderId}/customer`, c);
+export const lookupCustomers      = (q) => get(`/api/customers/lookup?q=${encodeURIComponent(q)}`);
 // SEPOS-ANDROID-001 — kitchen-message buffer for the native app to print on-device
 export const getKitchenMessageBuffer = (body) => post('/api/print/buffers/kitchen-message', body);
 export const serverPrintReceipt   = (order_id, payment_details, printer_name, printer_id) => post('/api/print/receipt', { order_id, payment_details, printer_name, printer_id });

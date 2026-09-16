@@ -166,6 +166,15 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
     return COLOUR_MAP[status.colour_status] || COLOUR_MAP.occupied;
   };
 
+  // SEPOS-CHECKBACK-001 — ✓ when the course the table is on has been checked back
+  // (tables/status carries the orders.* columns, incl. checkback_*_at).
+  const getCheckback = (table) => {
+    const st = tableStatuses.find(s => s.table_id === table.id);
+    if (!st) return null;
+    const key = { starters_done: 'checkback_starters_at', mains_done: 'checkback_mains_at', desserts_done: 'checkback_desserts_at' }[st.colour_status];
+    return key && st[key] ? st[key] : null;
+  };
+
   const getTableTime = (tableId) => {
     const order = orderForTable(openOrders, tableId);
     if (!order) return null;
@@ -483,7 +492,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                   onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
                 >
                   <div style={{ fontSize: Math.max(12, Math.min(22, Math.round(w * 0.17))), fontWeight: 800, color: colours.text, textAlign: 'center', padding: '0 4px' }}>
-                    {table.is_takeaway ? '🥡 ' : ''}{tableLabel(table)}
+                    {table.is_takeaway ? '🥡 ' : ''}{tableLabel(table)}{getCheckback(table) ? ' ✓' : ''}
                   </div>
                   {time && (
                     <div style={{
@@ -622,7 +631,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                       fontSize: 10.5, fontWeight: 800, letterSpacing: '.4px',
                       textTransform: 'uppercase', borderRadius: 999, padding: '3px 9px',
                     }}>
-                      {colours.label}
+                      {colours.label}{getCheckback(table) ? ' ✓' : ''}
                     </div>
 
                     {/* Table number */}

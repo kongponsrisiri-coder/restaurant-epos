@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v181'; // v181: v1.9.62 — + floor-map bill reprint shows deposit/service like the original
+const CACHE_NAME = 'siamepos-shell-v182'; // v182: v1.9.63 — Arrived button available without Call
 const APP_SHELL = [
   '/',
   '/index.html',

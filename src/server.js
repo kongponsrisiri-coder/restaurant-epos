@@ -4184,11 +4184,14 @@ app.put('/api/orders/:id/course/:course/arrived', async (req, res) => {
          LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
          LEFT JOIN categories ON categories.id = COALESCE(menu_items.category_id, order_items.dest_category_id)
         WHERE order_items.order_id = $1 AND order_items.course = $2 AND order_items.voided = 0
-          AND order_items.is_fired = 1 AND order_items.status <> 'served'
+          AND order_items.status <> 'served'
           AND (categories.is_bar = 0 OR categories.is_bar IS NULL)`,
       [orderId, course]);
     for (const it of items.rows) {
-      await pool.query(`UPDATE order_items SET status='served', served_at=$1 WHERE id=$2`, [now, it.id]);
+      // Venues that never press "Call" send everything at once — "Arrived" is
+      // still true for them, so an un-called item is marked called+served here
+      // (arrived implies cooked) rather than ignored.
+      await pool.query(`UPDATE order_items SET status='served', served_at=$1, is_fired=1, fired_at=COALESCE(fired_at, $1) WHERE id=$2`, [now, it.id]);
       io.emit('item_status_changed', { item_id: it.id, status: 'served' });
       await offlineQueue.enqueue('update_item_status', { localItemId: Number(it.id), status: 'served' });
     }

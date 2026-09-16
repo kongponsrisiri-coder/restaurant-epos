@@ -957,6 +957,25 @@
     const root = $('tw-root');
     if (!root) return;
 
+    // SEPOS-ONLINE-TOGGLE-001 — owner paused online ordering (Admin → Settings →
+    // Online Ordering). Show the notice instead of a menu nobody can order from;
+    // the server refuses order creation regardless.
+    if (state.settings && state.settings.online_ordering_enabled === false && !state.orderResult) {
+      const nm = state.settings.restaurant_name ? esc(state.settings.restaurant_name) : 'Order Takeaway';
+      root.innerHTML = `
+        <div class="tw-header">
+          <div class="tw-title">🥡 ${nm}</div>
+          <button class="tw-close" id="tw-close" aria-label="Close">✕</button>
+        </div>
+        <div class="tw-body"><div class="tw-body-inner" style="text-align:center;padding:32px 16px">
+          <div style="font-size:40px;line-height:1">⏸</div>
+          <h3 style="margin:14px 0 8px;font-size:18px">Online ordering is paused right now</h3>
+          <p style="margin:0;color:#555;line-height:1.5">We're not taking online orders at the moment — please call the restaurant, or check back later. Thank you for your patience.</p>
+        </div></div>`;
+      $('tw-close')?.addEventListener('click', closeWidget);
+      return;
+    }
+
     // Preserve scroll within the SAME view so tapping a dish to add it doesn't
     // jump the menu back to the top (render() replaces the whole modal HTML).
     // Reset to top only when the view actually changes (step / cart toggle).
@@ -1254,7 +1273,7 @@
   async function loadSettings() {
     try {
       const r = await fetch(API + '/api/takeaway/settings?restaurant_id=' + encodeURIComponent(RESTAURANT_ID));
-      if (r.ok) state.settings = await r.json();
+      if (r.ok) { state.settings = await r.json(); render(); }   // SEPOS-ONLINE-TOGGLE-001 — paused flag may land after first paint
     } catch (e) {}
   }
 

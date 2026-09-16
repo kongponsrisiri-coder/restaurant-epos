@@ -1607,6 +1607,25 @@ export default function SettingsSection() {
 
       {/* Print text size moved to Admin → Printers (SEPOS-PRINT-FONT-001) — it's a printer setting. */}
 
+      {/* ── Online ordering ON/OFF (SEPOS-ONLINE-TOGGLE-001, Akin Thai ask) ──
+          Absent/'1' = on. '0' pauses the website order page + widget and the
+          server refuses new online orders. Bookings + QR table ordering untouched. */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🥡 Online Ordering</h2>
+        <label style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer', fontSize:14 }}>
+          <input type="checkbox" checked={settings.online_ordering_enabled !== '0'} onChange={e => setSettings({...settings, online_ordering_enabled:e.target.checked?'1':'0'})} />
+          <span>Online ordering is <b>{settings.online_ordering_enabled !== '0' ? 'ON' : 'OFF'}</b></span>
+        </label>
+        <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>
+          When off, your website's order page and widget show "Online ordering is paused" and no new online orders are accepted — for example while you're short-staffed, on holiday, or the kitchen is at capacity. Bookings are unaffected. Switch it back on here any time; it takes effect within a minute.
+        </div>
+        {settings.online_ordering_enabled === '0' && (
+          <div style={{ marginTop:10, padding:'8px 12px', borderRadius:8, background:'#fff7ed', border:'1px solid #fed7aa', color:'#9a3412', fontSize:13, fontWeight:600 }}>
+            ⏸ Online ordering is currently paused — customers can't place orders from your website.
+          </div>
+        )}
+      </div>
+
       {/* ── Delivery (SEPOS-DELIVERY-002) ── */}
       <div style={cardStyle}>
         <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🚗 Online Delivery</h2>

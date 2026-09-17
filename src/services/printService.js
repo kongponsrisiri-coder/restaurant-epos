@@ -814,19 +814,20 @@ let _printQueue = Promise.resolve();
 // longer wait only delays the LPR fallback when the device is LPR-only
 // or the connect packet is dropped.
 //
-// SEPOS-PRINT-PACING-001 (Baanrai, 16 Sep) → SEPOS-PRINT-PACING-002 (Fern, 17 Sep)
+// SEPOS-PRINT-PACING-001 (Baanrai, 16 Sep) → -002 / -003 (Fern, 17 Sep)
 // The pre-.60 code wrote the whole ticket in one write(), resolved 800 ms
-// after connect and DESTROYED the socket — a long ticket on a slow link could
-// be cut mid-raster (blank strip at Baanrai). v1.9.60 replaced that with
-// paced 4 KB chunks + a mid-send RETRY. The retry was wrong: when the first
-// attempt had already put part of the job into the printer, re-sending from
-// byte 0 landed inside a half-received command → garbage raster + a second
-// header (Fern, first lunch service on .63). Rule now: a job that has reached
-// the printer is NEVER re-sent. One write() like before (same bytes-on-wire
-// shape the fleet ran on for months), wait until the kernel has accepted every
-// byte, then end() gracefully so the FIN goes AFTER the data instead of
-// destroy() cutting it. A failure before connect still falls through to LPR;
-// a failure after connect rejects loudly (printAlerts) — never duplicates.
+// after connect and DESTROYED the socket. v1.9.60 paced/retried and reported a
+// mid-send drop as a FAILURE. Both halves were wrong for Fern's printer, which
+// drops the connection mid-job but has printed every ticket for months:
+//   • the retry (.60–.63) re-sent from byte 0 into a half-received command
+//   • the failure report (.60–.64) made the till's ReceiptPrinter fallback
+//     print the bill AGAIN through the Windows driver, on top of the raw job
+// Rule now = the pre-.60 contract: once the job has REACHED the printer it is
+// reported as sent — no retry, no LPR/CUPS fallback, no client-side re-render.
+// The drop is logged with byte counts so we can see what the card does.
+// Only "could not connect" is still a failure (→ LPR → CUPS → client fallback).
+// Kept from .60: one write(), then end() so the FIN follows the last byte
+// instead of destroy() cutting it (Baanrai blank strip).
 const _TCP_DRAIN_TIMEOUT_MS = 30000;   // a printer chewing a big raster is slow, not dead
 
 function _sendTcp(ip, port, buf, timeoutMs = 2000) {
@@ -834,34 +835,26 @@ function _sendTcp(ip, port, buf, timeoutMs = 2000) {
     const sock = new net.Socket();
     let settled = false;
     let connected = false;
-    let accepted = false;          // kernel took every byte
     const finish = (err) => {
       if (settled) return;
       settled = true;
       sock.destroy();
       setTimeout(() => err ? reject(err) : resolve(), 1500);
     };
-    const fail = (message) => { const e = new Error(message); e.midSend = connected; finish(e); };
+    // After connect, every outcome is "sent" — see the contract above.
+    const soft = (what) => {
+      console.warn(`[print] ${ip}:${port} ${what} after ${sock.bytesWritten}/${buf.length} bytes — job reached the printer, reporting as sent (no re-send)`);
+      finish(null);
+    };
     sock.setTimeout(timeoutMs);
-    sock.on('error', (e) => {
-      if (connected && accepted) { console.warn(`[print] ${ip}: late socket error after full send (${e.message}) — treating as sent`); return finish(null); }
-      console.warn(`[print] ${ip}:${port} socket error ${connected ? 'mid-send' : 'before connect'}: ${e.message}`);
-      e.midSend = connected;
-      finish(e);
-    });
-    sock.on('timeout', () => fail(connected ? `Printer at ${ip} stalled mid-job` : `Printer at ${ip} timed out`));
-    sock.on('close', () => {
-      if (settled) return;
-      if (accepted) return finish(null);
-      console.warn(`[print] ${ip}:${port} closed by printer mid-send (${sock.bytesWritten}/${buf.length} bytes)`);
-      fail(`Printer at ${ip} closed the connection mid-job`);
-    });
+    sock.on('error', (e) => connected ? soft(`socket error (${e.message})`) : finish(e));
+    sock.on('timeout', () => connected ? soft('stalled') : finish(new Error(`Printer at ${ip} timed out`)));
+    sock.on('close', () => { if (!settled) connected ? soft('closed by printer') : finish(new Error(`Printer at ${ip} closed before connect`)); });
     sock.connect(parseInt(port, 10) || 9100, ip, () => {
       connected = true;
       sock.setTimeout(_TCP_DRAIN_TIMEOUT_MS);
       sock.write(buf, (err) => {
-        if (err) return fail(err.message);
-        accepted = true;
+        if (err) return soft(`write error (${err.message})`);
         sock.end(() => finish(null));   // FIN only after the last byte is flushed
       });
     });
@@ -1176,9 +1169,6 @@ function sendRaw(ip, port, buf, options = {}) {
       // 1) RAW 9100 — fast path, works for most modern printers.
       try { return await _sendTcp(ip, port, buf); }
       catch (rawErr) {
-        // The job REACHED the printer and then broke — never re-send it via
-        // LPR/CUPS (that is a second copy on top of a half-printed one).
-        if (rawErr.midSend) throw rawErr;
         // 2) LPR 515 — older WAVLINK / TP-Link / no-brand USB print
         //    servers only expose this. Same data, structured handshake.
         try {

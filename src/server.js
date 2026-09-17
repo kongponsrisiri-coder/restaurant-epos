@@ -11409,9 +11409,12 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
         COUNT(*) AS total_visits,
         MIN(DATE(opened_at)) AS first_visit,
         MAX(DATE(opened_at)) AS last_visit,
-        COALESCE(SUM(total), 0) AS total_spend
+        COALESCE(SUM(CASE WHEN status = 'closed' THEN total ELSE 0 END), 0) AS total_spend
       FROM orders
-      WHERE status = 'closed'
+      -- SEPOS-CUSTOMER-ORDER-002 (Baan Rao, 17 Sep): a guest attached to an OPEN
+      -- table shows in Customers straight away (visit counted); spend still
+      -- counts CLOSED bills only. Cancelled/voided orders never count.
+      WHERE status IN ('open', 'closed')
         -- SEPOS-CUSTOMER-ORDER-001: takeaway AND dine-in orders with a contact
         AND ((customer_email IS NOT NULL AND TRIM(customer_email) <> '')
           OR (customer_phone IS NOT NULL AND TRIM(customer_phone) <> ''))

@@ -14,7 +14,8 @@ const { stripe } = require('./stripeClient');
 
 // Known monthly amounts → plan slug (what PLAN_LABEL in the UI understands).
 // A Stripe price with a lookup_key wins over this table.
-const AMOUNT_TO_PLAN = { 5900: 'founder', 8900: 'pro', 4900: 'spa', 500: 'website' };
+const AMOUNT_TO_PLAN = { 5900: 'founder', 8900: 'pro', 4900: 'spa', 3900: 'ordering', 500: 'website' };
+const LIVE = new Set(['active', 'trialing', 'past_due']);
 
 function monthlyPence(item) {
   const price = item.price || {};
@@ -29,40 +30,82 @@ function monthlyPence(item) {
 }
 
 /**
- * Sync one client's plan / monthly_fee / next_billing from its live Stripe
- * subscription. Returns { synced, monthly_fee, plan } or { synced:false, reason }.
+ * The LIVE subscription for a client — never a canceled one (Akin's card was
+ * linked to its canceled £5 website sub while the £39 ordering sub was live).
+ * Order: the linked sub if live → another live sub on the same customer →
+ * a live sub on any Stripe customer with the client's email.
+ */
+async function findLiveSubscription(c) {
+  const s = stripe();
+  const expand = ['items.data.price'];
+  if (c.stripe_subscription_id) {
+    try {
+      const sub = await s.subscriptions.retrieve(c.stripe_subscription_id, { expand });
+      if (LIVE.has(sub.status)) return sub;
+      const cust = typeof sub.customer === 'string' ? sub.customer : sub.customer && sub.customer.id;
+      if (cust) {
+        const list = await s.subscriptions.list({ customer: cust, status: 'all', limit: 20, expand: ['data.items.data.price'] });
+        const live = list.data.find(x => LIVE.has(x.status));
+        if (live) return live;
+      }
+    } catch (e) { console.warn(`[billing-sync] linked sub ${c.stripe_subscription_id} unreadable: ${e.message}`); }
+  }
+  if (c.stripe_customer_id) {
+    const list = await s.subscriptions.list({ customer: c.stripe_customer_id, status: 'all', limit: 20, expand: ['data.items.data.price'] });
+    const live = list.data.find(x => LIVE.has(x.status));
+    if (live) return live;
+  }
+  if (c.email) {
+    const customers = await s.customers.list({ email: String(c.email).trim(), limit: 10 });
+    for (const cu of customers.data) {
+      const list = await s.subscriptions.list({ customer: cu.id, status: 'all', limit: 20, expand: ['data.items.data.price'] });
+      const live = list.data.find(x => LIVE.has(x.status));
+      if (live) return live;
+    }
+  }
+  return null;
+}
+
+/**
+ * Sync one client's plan / monthly_fee / next_billing from its LIVE Stripe
+ * subscription (and re-point the card at it if the linked one went stale).
+ * Returns { synced, monthly_fee, plan } or { synced:false, reason }.
  * Never throws — billing sync must not break a webhook or boot.
  */
 async function syncClientBilling(clientId) {
   try {
     const { rows } = await pool.query(
-      'SELECT id, restaurant_name, plan, monthly_fee, stripe_subscription_id, stripe_customer_id FROM clients WHERE id = $1',
+      'SELECT id, restaurant_name, email, plan, monthly_fee, stripe_subscription_id, stripe_customer_id FROM clients WHERE id = $1',
       [clientId]);
     const c = rows[0];
     if (!c) return { synced: false, reason: 'no such client' };
-    if (!c.stripe_subscription_id) return { synced: false, reason: 'no subscription id' };
 
-    const sub = await stripe().subscriptions.retrieve(c.stripe_subscription_id, { expand: ['items.data.price'] });
+    const sub = await findLiveSubscription(c);
+    if (!sub) return { synced: false, reason: 'no live Stripe subscription for this client (card left untouched)' };
     const items = (sub.items && sub.items.data) || [];
     if (!items.length) return { synced: false, reason: 'subscription has no items' };
 
-    const pence = items.reduce((s, it) => s + monthlyPence(it), 0);
+    const pence = items.reduce((t, it) => t + monthlyPence(it), 0);
     const monthly_fee = Math.round(pence) / 100;
     const first = items[0].price || {};
-    // Plan slug: Stripe lookup_key → known amount → keep whatever the card has
-    // (a raw price id is still resolvable by the UI's fallback label).
-    const plan = first.lookup_key || AMOUNT_TO_PLAN[pence] || c.plan || first.id;
+    // Plan slug: Stripe lookup_key → known amount → the price id (UI shows the fee for those).
+    const plan = first.lookup_key || AMOUNT_TO_PLAN[pence] || first.id;
     const periodEnd = sub.current_period_end || items[0].current_period_end;
     const next_billing = periodEnd ? new Date(periodEnd * 1000).toISOString().slice(0, 10) : null;
+    const customerId = typeof sub.customer === 'string' ? sub.customer : (sub.customer && sub.customer.id) || null;
 
     await pool.query(
       `UPDATE clients SET monthly_fee = $2, plan = $3,
          next_billing = COALESCE($4, next_billing),
-         stripe_customer_id = COALESCE(stripe_customer_id, $5)
+         stripe_subscription_id = $5,
+         stripe_customer_id = COALESCE($6, stripe_customer_id),
+         status = CASE WHEN status IN ('setup', 'trial', 'churned', 'past_due') THEN 'active' ELSE status END
        WHERE id = $1`,
-      [c.id, monthly_fee, plan, next_billing, typeof sub.customer === 'string' ? sub.customer : (sub.customer && sub.customer.id) || null]);
+      [c.id, monthly_fee, plan, next_billing, sub.id, customerId]);
+    if (c.stripe_subscription_id && c.stripe_subscription_id !== sub.id)
+      console.log(`[billing-sync] ${c.restaurant_name}: re-linked ${c.stripe_subscription_id} → ${sub.id} (live)`);
     console.log(`[billing-sync] ${c.restaurant_name}: plan=${plan} £${monthly_fee}/mo next=${next_billing || '—'}`);
-    return { synced: true, monthly_fee, plan, next_billing };
+    return { synced: true, monthly_fee, plan, next_billing, subscription_id: sub.id };
   } catch (err) {
     console.warn(`[billing-sync] client ${clientId}: ${err.message}`);
     return { synced: false, reason: err.message };
@@ -82,16 +125,15 @@ async function syncBySubscription({ subscriptionId, customerId }) {
 }
 
 /**
- * Backfill: every client with a subscription id whose card has no fee (or a
- * raw price id as the plan). Runs once at boot, and behind the admin
- * "sync all" endpoint. Cheap — one Stripe read per affected client.
+ * Backfill at boot and behind the admin "sync all" endpoint: every card is
+ * re-read from its LIVE subscription; cards with none are left untouched.
  */
 async function syncAllStale({ all = false } = {}) {
   if (!process.env.STRIPE_SECRET_KEY) return { skipped: 'no STRIPE_SECRET_KEY' };
-  const { rows } = await pool.query(all
-    ? `SELECT id FROM clients WHERE stripe_subscription_id IS NOT NULL`
-    : `SELECT id FROM clients WHERE stripe_subscription_id IS NOT NULL
-        AND (monthly_fee IS NULL OR monthly_fee = 0 OR plan LIKE 'price_%')`);
+  // Every card that could have a subscription: linked, or matchable by email.
+  // Cards with no live sub are left exactly as they are.
+  const { rows } = await pool.query(
+    `SELECT id FROM clients WHERE stripe_subscription_id IS NOT NULL OR stripe_customer_id IS NOT NULL OR email IS NOT NULL`);
   const results = [];
   for (const r of rows) results.push({ id: r.id, ...(await syncClientBilling(r.id)) });
   const n = results.filter(x => x.synced).length;
@@ -99,4 +141,4 @@ async function syncAllStale({ all = false } = {}) {
   return { checked: rows.length, synced: n, results };
 }
 
-module.exports = { syncClientBilling, syncBySubscription, syncAllStale };
+module.exports = { syncClientBilling, syncBySubscription, syncAllStale, findLiveSubscription };

@@ -17,6 +17,23 @@ const { stripe } = require('./stripeClient');
 const AMOUNT_TO_PLAN = { 5900: 'founder', 8900: 'pro', 4900: 'spa', 3900: 'ordering', 500: 'website' };
 const LIVE = new Set(['active', 'trialing', 'past_due']);
 
+// Korakot's hand-verified Stripe customer → ops slug map (the Control Room's
+// "Your reference" column, client-notes.json, 18 Sep 2026). Used ONLY when a
+// card can't be matched by subscription id, customer id or email — the
+// customers below pay from a different email than the one on their card.
+// The Attach button on the card supersedes this; add here when a new client
+// pays from an unrelated email.
+const CUSTOMER_TO_SLUG = {
+  cus_VHTyEZbirSIydt: 'baanrao',      // On-anan Davies — Baan Rao Thai Cuisine
+  cus_VD5KehGqGbgjcY: 'akin-thai',    // Jaranthon Intapad — Akin Thai (Lite Ordering £39)
+  cus_V8h3s4uhHZaz2n: 'yumyum',       // Den Vachum — Yum Yum Thai Bath
+  cus_V667MJl8AJseLK: 'fern',         // CJ Allen — Fern Modern Sushi
+  cus_Urnio6Ci6qFcRw: 'thannthai',    // Thann Thai Ltd
+  cus_Uo61rGaAFG3T8I: 'chart-thai',   // Chart Thai Pinner
+  cus_UwOujs00lCbSKC: 'highbury-massage',
+  cus_UwMjaaEVEu1t0O: 'jinta',
+};
+
 function monthlyPence(item) {
   const price = item.price || {};
   const qty = item.quantity || 1;
@@ -63,6 +80,15 @@ async function findLiveSubscription(c) {
       if (live) return live;
     }
   }
+  // Last resort: the verified customer → slug map.
+  if (c.slug) {
+    const cust = Object.keys(CUSTOMER_TO_SLUG).find(k => CUSTOMER_TO_SLUG[k] === c.slug);
+    if (cust) {
+      const list = await s.subscriptions.list({ customer: cust, status: 'all', limit: 20, expand: ['data.items.data.price'] });
+      const live = list.data.find(x => LIVE.has(x.status));
+      if (live) return live;
+    }
+  }
   return null;
 }
 
@@ -75,7 +101,7 @@ async function findLiveSubscription(c) {
 async function syncClientBilling(clientId) {
   try {
     const { rows } = await pool.query(
-      'SELECT id, restaurant_name, email, plan, monthly_fee, stripe_subscription_id, stripe_customer_id FROM clients WHERE id = $1',
+      'SELECT id, restaurant_name, email, slug, plan, monthly_fee, stripe_subscription_id, stripe_customer_id FROM clients WHERE id = $1',
       [clientId]);
     const c = rows[0];
     if (!c) return { synced: false, reason: 'no such client' };
@@ -133,7 +159,7 @@ async function syncAllStale({ all = false } = {}) {
   // Every card that could have a subscription: linked, or matchable by email.
   // Cards with no live sub are left exactly as they are.
   const { rows } = await pool.query(
-    `SELECT id FROM clients WHERE stripe_subscription_id IS NOT NULL OR stripe_customer_id IS NOT NULL OR email IS NOT NULL`);
+    `SELECT id FROM clients WHERE stripe_subscription_id IS NOT NULL OR stripe_customer_id IS NOT NULL OR email IS NOT NULL OR slug IS NOT NULL`);
   const results = [];
   for (const r of rows) results.push({ id: r.id, ...(await syncClientBilling(r.id)) });
   const n = results.filter(x => x.synced).length;

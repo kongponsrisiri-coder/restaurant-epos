@@ -14,6 +14,16 @@ let CLOUD_API_URL = process.env.CLOUD_API_URL || ''; // SEPOS-FERN-BOOT-001 — 
 // multi-tenant deployments approaching Railway's egress quota).
 const PING_INTERVAL_MS = parseInt(process.env.SYNC_PING_MS || '5000', 10);
 const PING_TIMEOUT_MS = 5000;
+// SEPOS-SYNC-STALL-001 (19 Sep 2026, Korakot's Mac till; same class as
+// PUSH-STALL-001 on 1 Sep) — a sync tick holds `inProgress` while it runs, and
+// 30 of the 44 cloud requests in this file carried NO timeout. One hung
+// request during a network wobble left the flag set for 24 h: no pushes, no
+// pulls, app otherwise fine, 0 attempts logged. Two guards, one place:
+//   1. every fetch() in this module gets a default timeout (explicit signals win)
+//   2. tick() abandons a tick that has been running longer than WATCHDOG_MS
+const REQUEST_TIMEOUT_MS = parseInt(process.env.SYNC_REQUEST_TIMEOUT_MS || '30000', 10);
+const WATCHDOG_MS = parseInt(process.env.SYNC_WATCHDOG_MS || '120000', 10);
+const fetch = (input, init = {}) => globalThis.fetch(input, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), ...init });
 
 const _pullEtags = new Map(); // SEPOS-SYNC-EGRESS-001
 let status = 'local'; // 'cloud' | 'local' | 'syncing'
@@ -1904,10 +1914,17 @@ async function syncOnce() {
   // the log filled with "tick failed: orderIdMap is not defined" every 5s.
 }
 
+let inProgressSince = 0;
 async function tick() {
   if (!offlineQueue.isLocal) return;
-  if (inProgress) return;
+  if (inProgress) {
+    if (inProgressSince && Date.now() - inProgressSince > WATCHDOG_MS) {
+      console.error(`[sync] ⚠️ tick stuck for ${Math.round((Date.now() - inProgressSince) / 1000)}s — abandoning it (SEPOS-SYNC-STALL-001 watchdog); next tick runs now`);
+      inProgress = false;
+    } else return;
+  }
   inProgress = true;
+  inProgressSince = Date.now();
   try {
     const online = await ping();
     if (!online) {

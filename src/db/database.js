@@ -727,6 +727,10 @@ async function initDB() {
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_depth INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_quarantined INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_oldest_at TIMESTAMP`);
+    // SEPOS-REMOTE-002 — RustDesk ID (plain) + password (AES-GCM under AUTH_SECRET) per till
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS rustdesk_id VARCHAR(32)`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS rustdesk_pw_enc TEXT`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS rustdesk_seen_at TIMESTAMP`);
 
     // SEPOS-PRINT-ALERT-001 — held tickets from failed kitchen/bar/station
     // prints (local tills only; cloud rows never created). See printAlertService.

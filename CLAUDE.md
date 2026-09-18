@@ -93,6 +93,7 @@ Index of what's in there is in `~/Documents/SiamEPOS-Docs/README.md`. Read it be
   in chat with the release report — Korakot forwards it to owners.
 
 ## Critical Coding Rules
+- **🔴 Printer / sync / transport plumbing NEVER rides a feature release** (Korakot, 2026-09-18 — Fern bill-print incident, see TEAM-STATUS rule 10 + `~/Documents/SiamEPOS-Docs/qa-reports/Incident-SEPOS-PRINT-FERN-2026-09-17.md`). Own tag, quiet day, canary on the client's printer class first; changing a function's success/failure signal means tracing every consumer; hotfixes need the till log + actual bytes before a tag.
 - **OS-AGNOSTIC by default — SiamEPOS Pro runs on Mac DMG AND Windows EXE.** Every customer-facing string, error message, system prompt (LINE bot), email template, manual, web page copy, and admin UI label MUST work for both platforms. Specifically:
   - ❌ NEVER write "your Mac" / "this Mac" / "on the Mac" as the default term
   - ✅ Use "your device" / "this device" / "your till" / "the desktop app"

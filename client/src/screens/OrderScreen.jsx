@@ -1813,9 +1813,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     {(() => {
                       const c = Number(course);
                       const key = CHECKBACK_KEY[c];
-                      const kitchenFired = fired.filter(i => !i.is_bar);
-                      if (!key || kitchenFired.length === 0) return null;
-                      const allServed = kitchenFired.every(i => i.status === 'served');
+                      // Any kitchen item on the course (called or not) — venues that
+                      // never press Call still get Arrived → Check back.
+                      const kitchenOnCourse = courseItems.filter(i => !i.voided && !i.is_bar);
+                      if (!key || kitchenOnCourse.length === 0) return null;
+                      const allServed = kitchenOnCourse.every(i => i.status === 'served');
                       const stamp = order?.[key];
                       const busy = checkbackBusy === c;
                       if (!allServed) return (

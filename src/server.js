@@ -1454,7 +1454,7 @@ app.get('/api/health', async (req, res) => {
     // Wrapped separately so a missing devices table (older deploy) never breaks health.
     let tills = [];
     try {
-      const d = await pool.query(`SELECT device_id, app_version, platform, last_seen, queue_depth, queue_quarantined, queue_oldest_at FROM devices ORDER BY last_seen DESC`);
+      const d = await pool.query(`SELECT device_id, app_version, platform, last_seen, queue_depth, queue_quarantined, queue_oldest_at, rustdesk_id FROM devices ORDER BY last_seen DESC`);
       tills = d.rows.map(r => ({
         device_id: r.device_id,
         app_version: r.app_version,
@@ -1463,6 +1463,7 @@ app.get('/api/health', async (req, res) => {
         queue_depth: r.queue_depth ?? 0,               // SEPOS-SYNC-TELEMETRY-001
         queue_quarantined: r.queue_quarantined ?? 0,
         queue_oldest_at: r.queue_oldest_at ?? null,
+        rustdesk_id: r.rustdesk_id ?? null,             // SEPOS-REMOTE-002 (id only — password stays behind admin auth)
       }));
     } catch (_) { /* devices table not present yet */ }
     res.json({
@@ -1482,6 +1483,68 @@ app.get('/api/health', async (req, res) => {
 // + every few minutes so ops can see which tills exist, their version, platform
 // and last-seen. Ungated telemetry (device_id is the PK → repeated calls just
 // upsert one row). Field lengths capped defensively.
+// SEPOS-REMOTE-002 — per-till RustDesk password at rest: AES-256-GCM under a
+// key derived from this tenant's AUTH_SECRET. Only the admin endpoint below
+// decrypts; /api/health never carries the password.
+function remoteKey() { return crypto.createHash('sha256').update('siamepos-remote:' + AUTH_SECRET).digest(); }
+function remoteEncrypt(text) {
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv('aes-256-gcm', remoteKey(), iv);
+  const enc = Buffer.concat([c.update(String(text), 'utf8'), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), enc]).toString('base64');
+}
+function remoteDecrypt(b64) {
+  try {
+    const buf = Buffer.from(String(b64), 'base64');
+    const d = crypto.createDecipheriv('aes-256-gcm', remoteKey(), buf.subarray(0, 12));
+    d.setAuthTag(buf.subarray(12, 28));
+    return Buffer.concat([d.update(buf.subarray(28)), d.final()]).toString('utf8');
+  } catch { return null; }
+}
+
+// Owner/manager view: which tills of THIS restaurant can be reached remotely.
+app.get('/api/devices/remote', requireStaffAuth(['admin', 'manager']), async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT device_id, app_version, platform, last_seen, rustdesk_id, rustdesk_pw_enc, rustdesk_seen_at FROM devices ORDER BY last_seen DESC`);
+    res.json(r.rows.map(d => ({
+      device_id: d.device_id, app_version: d.app_version, platform: d.platform, last_seen: d.last_seen,
+      rustdesk_id: d.rustdesk_id || null,
+      rustdesk_password: d.rustdesk_pw_enc ? remoteDecrypt(d.rustdesk_pw_enc) : null,
+      rustdesk_seen_at: d.rustdesk_seen_at || null,
+    })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-REMOTE-002 — manual (re)run of the RustDesk setup from Admin → Settings on
+// THIS till (Windows desktop only). Same elevated script the app runs at launch;
+// the UAC prompt appears on the till, then the ID/password are re-read and
+// heartbeated straight away. Cloud / Mac / browser tills get a friendly 400.
+app.post('/api/remote/setup', requireStaffAuth(['admin', 'manager']), async (req, res) => {
+  try {
+    const script = process.env.RUSTDESK_SETUP_SCRIPT, stateFile = process.env.RUSTDESK_STATE_FILE;
+    if (process.platform !== 'win32' || !script || !stateFile) {
+      return res.status(400).json({ error: 'Remote support setup runs on the Windows till itself — open Admin → Settings on that till.' });
+    }
+    const fs = require('fs'), { spawn } = require('child_process');
+    if (!fs.existsSync(script)) return res.status(400).json({ error: 'Setup script missing — reinstall the till app.' });
+    await new Promise((resolve) => {
+      const ps = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-Command',
+        `Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${script}"'`],
+        { windowsHide: true, stdio: 'ignore' });
+      const t = setTimeout(() => { try { ps.kill(); } catch {} resolve(); }, 4 * 60 * 1000);
+      ps.on('exit', () => { clearTimeout(t); resolve(); }); ps.on('error', () => { clearTimeout(t); resolve(); });
+    });
+    let st = null;
+    try { st = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch {}
+    if (!st || !st.id || !st.password) {
+      return res.status(409).json({ error: 'Setup did not complete — was the Windows permission prompt accepted, and is the till online?' });
+    }
+    process.env.RUSTDESK_ID = st.id; process.env.RUSTDESK_PASSWORD = st.password;
+    try { await heartbeatClient.beat(); } catch {}
+    res.json({ success: true, rustdesk_id: st.id });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/device/heartbeat', async (req, res) => {
   try {
     const { device_id, app_version, platform } = req.body || {};
@@ -1506,6 +1569,18 @@ app.post('/api/device/heartbeat', async (req, res) => {
        String(app_version || '').slice(0, 20), String(platform || '').slice(0, 20),
        qDepth, qQuar, qOldest]
     );
+    // SEPOS-REMOTE-002 — remote-support details ride the heartbeat, but only
+    // when the request proves it comes from the till (tenant sync secret) —
+    // otherwise anyone could plant a "connect here" pointing at their own PC.
+    const secretOk = !!process.env.SYNC_SECRET && (req.get('x-sync-secret') || '') === process.env.SYNC_SECRET;
+    const rdId = String(req.body?.rustdesk_id || '').trim();
+    if (secretOk && /^\d{6,12}$/.test(rdId)) {
+      const pw = String(req.body?.rustdesk_password || '');
+      await pool.query(
+        `UPDATE devices SET rustdesk_id = $1, rustdesk_pw_enc = $2, rustdesk_seen_at = CURRENT_TIMESTAMP WHERE device_id = $3`,
+        [rdId, pw ? remoteEncrypt(pw) : null, String(device_id).slice(0, 64)]
+      );
+    }
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -4109,11 +4184,14 @@ app.put('/api/orders/:id/course/:course/arrived', async (req, res) => {
          LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
          LEFT JOIN categories ON categories.id = COALESCE(menu_items.category_id, order_items.dest_category_id)
         WHERE order_items.order_id = $1 AND order_items.course = $2 AND order_items.voided = 0
-          AND order_items.is_fired = 1 AND order_items.status <> 'served'
+          AND order_items.status <> 'served'
           AND (categories.is_bar = 0 OR categories.is_bar IS NULL)`,
       [orderId, course]);
     for (const it of items.rows) {
-      await pool.query(`UPDATE order_items SET status='served', served_at=$1 WHERE id=$2`, [now, it.id]);
+      // Venues that never press "Call" send everything at once — "Arrived" is
+      // still true for them, so an un-called item is marked called+served here
+      // (arrived implies cooked) rather than ignored.
+      await pool.query(`UPDATE order_items SET status='served', served_at=$1, is_fired=1, fired_at=COALESCE(fired_at, $1) WHERE id=$2`, [now, it.id]);
       io.emit('item_status_changed', { item_id: it.id, status: 'served' });
       await offlineQueue.enqueue('update_item_status', { localItemId: Number(it.id), status: 'served' });
     }
@@ -11331,9 +11409,12 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
         COUNT(*) AS total_visits,
         MIN(DATE(opened_at)) AS first_visit,
         MAX(DATE(opened_at)) AS last_visit,
-        COALESCE(SUM(total), 0) AS total_spend
+        COALESCE(SUM(CASE WHEN status = 'closed' THEN total ELSE 0 END), 0) AS total_spend
       FROM orders
-      WHERE status = 'closed'
+      -- SEPOS-CUSTOMER-ORDER-002 (Baan Rao, 17 Sep): a guest attached to an OPEN
+      -- table shows in Customers straight away (visit counted); spend still
+      -- counts CLOSED bills only. Cancelled/voided orders never count.
+      WHERE status IN ('open', 'closed')
         -- SEPOS-CUSTOMER-ORDER-001: takeaway AND dine-in orders with a contact
         AND ((customer_email IS NOT NULL AND TRIM(customer_email) <> '')
           OR (customer_phone IS NOT NULL AND TRIM(customer_phone) <> ''))

@@ -496,7 +496,13 @@ function initSchema() {
       restaurant_id TEXT,
       app_version   TEXT,
       platform      TEXT,
-      last_seen     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      last_seen     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      queue_depth   INTEGER DEFAULT 0,
+      queue_quarantined INTEGER DEFAULT 0,
+      queue_oldest_at TEXT,
+      rustdesk_id   TEXT,
+      rustdesk_pw_enc TEXT,
+      rustdesk_seen_at TEXT
     );
 
     -- SEPOS-PRINT-ALERT-001 — held tickets from failed kitchen/bar/station
@@ -784,6 +790,13 @@ function runMigrations() {
   addColumnIfMissing('orders', 'checkback_starters_at', 'TEXT');
   addColumnIfMissing('orders', 'checkback_mains_at', 'TEXT');
   addColumnIfMissing('orders', 'checkback_desserts_at', 'TEXT');
+  // SEPOS-REMOTE-002 (+ the telemetry cols the cloud receiver already writes)
+  addColumnIfMissing('devices', 'queue_depth', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('devices', 'queue_quarantined', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('devices', 'queue_oldest_at', 'TEXT');
+  addColumnIfMissing('devices', 'rustdesk_id', 'TEXT');
+  addColumnIfMissing('devices', 'rustdesk_pw_enc', 'TEXT');
+  addColumnIfMissing('devices', 'rustdesk_seen_at', 'TEXT');
   // SEPOS-021: VAT rate per menu item
   addColumnIfMissing('menu_items', 'vat_rate', 'REAL DEFAULT 20.0');
   addColumnIfMissing('menu_items', 'is_online', 'INTEGER DEFAULT 1');

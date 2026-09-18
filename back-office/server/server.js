@@ -79,6 +79,9 @@ app.get('/api/healthz', (req, res) => res.json({ ok: true }));
 
 app.use('/api/auth',    authRoutes);
 app.use('/api/clients', clientsRoutes);
+// BO-BILLING-002 — cards with a Stripe subscription but no fee / raw price id
+// heal themselves at boot (the MRR tile was under-counting).
+setTimeout(() => require('./services/billingSync').syncAllStale().catch(() => {}), 15000);
 app.use('/api/health',  healthRoutes);
 app.use('/api/notes',   notesRoutes);
 app.use('/api/team',    teamRoutes);

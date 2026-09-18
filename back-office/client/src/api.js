@@ -151,6 +151,18 @@ export const api = {
   getBillingPlans: () =>
     fetch(`${API}/api/clients/billing/plans`, { headers: tokenHeader() }).then(handle),
 
+  // BO-BILLING-002 — MRR straight from Stripe (the truth), Control Room pattern.
+  getStripeMrr: () =>
+    fetch(`${API}/api/clients/billing/mrr`, { headers: tokenHeader() }).then(handle),
+
+  // BO-BILLING-002 — re-read plan / monthly fee / next billing from the live Stripe subscription.
+  syncBilling: (id) =>
+    fetch(`${API}/api/clients/${id}/billing/sync`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...tokenHeader() } }).then(handle),
+  attachSubscription: (id, subscription_id) =>
+    fetch(`${API}/api/clients/${id}/billing/attach`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...tokenHeader() }, body: JSON.stringify({ subscription_id }) }).then(handle),
+  syncAllBilling: () =>
+    fetch(`${API}/api/clients/billing/sync-all`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...tokenHeader() } }).then(handle),
+
   // BO-BILLING-001 — link an existing (manually-created) Stripe subscription by email.
   linkSubscription: (id) =>
     fetch(`${API}/api/clients/${id}/billing/link-subscription`, {

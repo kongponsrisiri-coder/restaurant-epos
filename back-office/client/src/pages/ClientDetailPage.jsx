@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
-import { C, card, btn, input, label, fmtRelTime, fmtMoney, STATUS_STYLE, PLAN_LABEL, productBadge } from '../theme.js';
+import { C, card, btn, input, label, fmtRelTime, fmtMoney, STATUS_STYLE, PLAN_LABEL, planLabel, productBadge } from '../theme.js';
 import StatusPill from '../components/StatusPill.jsx';
 import HealthDot from '../components/HealthDot.jsx';
 import Avatar from '../components/Avatar.jsx';
@@ -110,6 +110,30 @@ export default function ClientDetailPage() {
   };
 
   // Link a subscription created outside ops (matched by client email in Stripe).
+  // BO-BILLING-002c — attach this card to a live Stripe subscription that isn't on any card.
+  const [stripeSubs, setStripeSubs] = useState([]);
+  const [attachId, setAttachId] = useState('');
+  useEffect(() => { api.getStripeMrr().then(r => setStripeSubs((r?.subscriptions || []).filter(x => ['active', 'trialing', 'past_due'].includes(x.status) && (!x.client_id || x.client_id === Number(id))))).catch(() => setStripeSubs([])); }, [id]);
+  const attach = async () => {
+    if (!attachId) return;
+    try {
+      const r = await api.attachSubscription(id, attachId);
+      if (r?.synced) { await load(); window.alert(`Attached: ${PLAN_LABEL[r.plan] || r.plan} — £${r.monthly_fee}/mo ✓`); }
+      else window.alert(r?.reason || r?.error || 'Could not attach');
+    } catch (e) { window.alert(e.message); }
+  };
+  // BO-BILLING-002 — pull plan + fee from Stripe onto the card (fixes "—" MRR).
+  const [syncing, setSyncing] = useState(false);
+  const syncBilling = async () => {
+    setSyncing(true);
+    try {
+      const r = await api.syncBilling(id);
+      if (r?.synced) { await load(); window.alert(`Synced from Stripe: ${PLAN_LABEL[r.plan] || r.plan} — £${r.monthly_fee}/mo ✓`); }
+      else window.alert(r?.reason || r?.error || 'Nothing to sync (no Stripe subscription linked).');
+    } catch (e) { window.alert(e.message); }
+    finally { setSyncing(false); }
+  };
+
   const linkSub = async () => {
     setLinkingSub(true);
     try {
@@ -190,7 +214,7 @@ export default function ClientDetailPage() {
             </span>
           } sub={latest?.response_ms != null ? `${latest.response_ms} ms` : ''} />
           <HeroStat label="Orders today" value={latest?.orders_today ?? '—'} sub={latest?.last_order_at ? `last ${fmtRelTime(latest.last_order_at)}` : 'No orders yet'} />
-          <HeroStat label="Plan" value={PLAN_LABEL[client.plan] || client.plan || '—'} sub={client.monthly_fee ? `${fmtMoney(client.monthly_fee)} / month` : 'no fee set'} />
+          <HeroStat label="Plan" value={planLabel(client)} sub={client.monthly_fee ? `${fmtMoney(client.monthly_fee)} / month` : 'no fee set'} />
           <HeroStat label="Last ping" value={latest?.checked_at ? fmtRelTime(latest.checked_at) : '—'} sub={latest?.checked_at ? new Date(latest.checked_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : ''} />
         </div>
       </div>
@@ -298,9 +322,9 @@ export default function ClientDetailPage() {
                       onClick={createPayLink}
                       disabled={linking}
                       style={{ ...btn.gold, fontSize: 13, opacity: linking ? 0.6 : 1, cursor: linking ? 'wait' : 'pointer' }}
-                      title={`Create a Stripe Checkout link for the ${PLAN_LABEL[client.plan] || client.plan || 'current'} plan`}
+                      title={`Create a Stripe Checkout link for the ${planLabel(client)} plan`}
                     >
-                      {linking ? 'Creating…' : `💳 Create payment link${client.plan ? ` (${PLAN_LABEL[client.plan] || client.plan})` : ''}`}
+                      {linking ? 'Creating…' : `💳 Create payment link${client.plan ? ` (${planLabel(client)})` : ''}`}
                     </button>
                     <button
                       onClick={linkSub}
@@ -310,6 +334,25 @@ export default function ClientDetailPage() {
                     >
                       {linkingSub ? 'Linking…' : '🔗 Link existing subscription'}
                     </button>
+                    {stripeSubs.length > 0 && (
+                      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                        <select value={attachId} onChange={e => setAttachId(e.target.value)} style={{ ...input, width: 'auto', fontSize: 13, padding: '6px 8px' }} title="Live Stripe subscriptions not yet on a card">
+                          <option value="">Attach a Stripe subscription…</option>
+                          {stripeSubs.map(x => <option key={x.subscription_id} value={x.subscription_id}>{x.customer} · {x.product} · £{x.amount}/{x.interval || 'mo'}{x.client_id ? ' (this card)' : ''}</option>)}
+                        </select>
+                        <button onClick={attach} disabled={!attachId} style={{ ...btn.ghost, fontSize: 13, opacity: attachId ? 1 : 0.5 }}>Attach</button>
+                      </span>
+                    )}
+                    {client.stripe_subscription_id && (
+                      <button
+                        onClick={syncBilling}
+                        disabled={syncing}
+                        style={{ ...btn.ghost, fontSize: 13, opacity: syncing ? 0.6 : 1, cursor: syncing ? 'wait' : 'pointer' }}
+                        title="Re-read the plan, monthly fee and next billing date from the live Stripe subscription"
+                      >
+                        {syncing ? 'Syncing…' : '↻ Sync from Stripe'}
+                      </button>
+                    )}
                   </div>
                   {payLink && (
                     <div style={{ marginTop: 12, padding: 12, background: C.surfaceAlt || '#f6f7fb', borderRadius: 10, border: `1px solid ${C.border}` }}>

@@ -15,6 +15,7 @@ const express = require('express');
 const router  = express.Router();
 const { pool } = require('../db/pool');
 const { stripe } = require('../services/stripeClient');
+const { syncBySubscription, syncClientBilling } = require('../services/billingSync'); // BO-BILLING-002
 
 // BO-BILLING-002 (Krit for Korakot, 2026-07-14) — push a LINE message to
 // Korakot when a client pays / a payment fails, so billing isn't silent.
@@ -94,11 +95,13 @@ router.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
             [parseInt(clientId, 10), customerId, subscriptionId]
           );
           console.log(`[stripe-webhook] checkout.session.completed → active (client ${clientId}, ${r.rows.length} matched)`);
+          await syncClientBilling(parseInt(clientId, 10));   // BO-BILLING-002 — price → plan + monthly_fee
           const nm = r.rows[0] && r.rows[0].restaurant_name;
           notifyLine(`💰 New payment!\n\n${nm || 'A client'} just paid ${money(obj.amount_total)} — now ACTIVE.\n\nView: https://ops.siamepos.co.uk`);
         } else {
           const r = await setClientStatus({ subscriptionId, customerId }, 'active');
           console.log(`[stripe-webhook] checkout.session.completed (no client_id) → active (${r.rows.length} matched)`);
+          await syncBySubscription({ subscriptionId, customerId });   // BO-BILLING-002
           const nm = r.rows[0] && r.rows[0].restaurant_name;
           notifyLine(`💰 New payment!\n\n${nm || 'A client'} just paid ${money(obj.amount_total)} — now ACTIVE.\n\nView: https://ops.siamepos.co.uk`);
         }
@@ -126,6 +129,7 @@ router.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
             'active'
           );
           console.log(`[stripe-webhook] invoice.payment_succeeded → active (${r.rows.length} client matched)`);
+          await syncBySubscription({ subscriptionId: obj.subscription, customerId: obj.customer });   // BO-BILLING-002
         }
         break;
       }
@@ -148,6 +152,7 @@ router.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
           const r = await setClientStatus({ subscriptionId: obj.id, customerId: obj.customer }, next);
           console.log(`[stripe-webhook] subscription.updated status=${obj.status} → ${next} (${r.rows.length} client matched)`);
         }
+        await syncBySubscription({ subscriptionId: obj.id, customerId: obj.customer });   // BO-BILLING-002 — plan/price changes
         break;
       }
 

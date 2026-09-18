@@ -103,7 +103,11 @@ export const STATUS_STYLE = {
   paused:  { bg: '#f1f5f9', color: '#475569', label: 'Paused' },
 };
 
-export const PLAN_LABEL = { trial: 'Trial', cloud: 'Cloud', pro: 'Pro', founder: "Founder's Pack £59/mo", spa: 'Spa £49/mo' };
+export const PLAN_LABEL = { trial: 'Trial', cloud: 'Cloud', pro: 'Pro', founder: "Founder's Pack £59/mo", spa: 'Spa £49/mo', website: 'Website hosting £5/mo', ordering: 'Online ordering' };
+// BO-BILLING-002 — a card whose plan is a raw Stripe price id shows the fee instead of the id.
+export const planLabel = (client) => PLAN_LABEL[client?.plan]
+  || (client?.plan && String(client.plan).startsWith('price_') ? (client.monthly_fee ? `Stripe plan £${Number(client.monthly_fee).toFixed(0)}/mo` : 'Stripe plan') : client?.plan)
+  || '—';
 
 // BO-SPA-001 — product type badges. Records may carry service-only products
 // (website / social) with no till, so unknown values must render, not crash —

@@ -680,6 +680,9 @@ export const checkbackCourse      = (orderId, course, clear = false) => put(`/ap
 // SEPOS-CUSTOMER-ORDER-001 — attach a customer to an order; waiter lookup of known contacts
 export const setOrderCustomer     = (orderId, c) => put(`/api/orders/${orderId}/customer`, c);
 export const lookupCustomers      = (q) => get(`/api/customers/lookup?q=${encodeURIComponent(q)}`);
+// SEPOS-REMOTE-002 — tills of this restaurant reachable via RustDesk (admin/manager)
+export const getRemoteDevices     = () => get('/api/devices/remote');
+export const setupRemoteSupport   = () => post('/api/remote/setup', {});
 // SEPOS-ANDROID-001 — kitchen-message buffer for the native app to print on-device
 export const getKitchenMessageBuffer = (body) => post('/api/print/buffers/kitchen-message', body);
 export const serverPrintReceipt   = (order_id, payment_details, printer_name, printer_id) => post('/api/print/receipt', { order_id, payment_details, printer_name, printer_id });

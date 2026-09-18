@@ -810,9 +810,18 @@ function buildTestPage(info = {}) {
 
 let _printQueue = Promise.resolve();
 
-// 2s timeout: a printer on the same LAN answers in milliseconds, so a
+// 2s connect timeout: a printer on the same LAN answers in milliseconds, so a
 // longer wait only delays the LPR fallback when the device is LPR-only
 // or the connect packet is dropped.
+//
+// SEPOS-PRINT-PACING-004 (Fern, 17 Sep 2026) — this is the v1.9.59 routine,
+// restored BYTE-FOR-BYTE. v1.9.60–.65 rewrote it (paced chunks / retry /
+// graceful end / failure reporting) and Fern's IT-Solutions printer printed
+// garbage from ~row 200 of every bill on all of them, with identical bytes and
+// a single job. The one thing that differs from .59 is how this socket is
+// driven, so .59 it is. Do NOT touch this function again without printing a
+// real bill on a Fern-class printer first (see feedback memory
+// print_transport_never_in_feature_cut). Baanrai blank-strip work parked.
 function _sendTcp(ip, port, buf, timeoutMs = 2000) {
   return new Promise((resolve, reject) => {
     const sock = new net.Socket();
@@ -1609,6 +1618,7 @@ async function receiptBuffer(settings, order, items, paymentDetails = {}) {
 }
 
 module.exports = {
+  _sendTcp,   // exported for tests only
   printReceipt,
   openCashDrawer,         // SEPOS-DRAWER-001
   printFireNotice,
@@ -1631,4 +1641,5 @@ module.exports = {
   buildFireNotice,        // SEPOS-ANDROID-001 — native fire-notice buffer
   buildKitchenMessage,    // SEPOS-ANDROID-001 — native kitchen-message buffer
   printReportText,        // SEPOS-REPORTS-001 — admin report ESC/POS
+  sendRaw,                // SEPOS-PRINT-PACING-001 — exposed for the fake-printer harness
 };

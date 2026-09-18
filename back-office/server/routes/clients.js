@@ -410,6 +410,56 @@ async function resolvePriceId(plan) {
 // Stripe. Adding a recurring product/price in Stripe makes it appear here (and
 // in the ops dropdowns) automatically. Two-segment path can't collide with the
 // one-segment /:id routes.
+// BO-BILLING-002 (Korakot, 18 Sep 2026) — the MRR tile reads STRIPE, not the
+// cards. Same shape as the Control Room's pull_stripe(): every subscription,
+// active ones summed (monthly interval), names from the product, matched to a
+// client card by subscription id / customer id / email so the UI can show who
+// is paying with no card yet. Read-only.
+router.get('/billing/mrr', async (req, res) => {
+  try {
+    const s = stripe();
+    // Stripe allows 4 expand levels — price.product would be a 5th (the
+    // Control Room hit the same wall). Names come from a separate prices
+    // lookup, exactly as pull_stripe() does via /billing/plans.
+    const d = await s.subscriptions.list({ status: 'all', limit: 100, expand: ['data.customer', 'data.items.data.price'] });
+    const priceNames = new Map();
+    try {
+      const pl = await s.prices.list({ limit: 100, expand: ['data.product'] });
+      for (const p of pl.data) priceNames.set(p.id, (p.product && p.product.name) || p.nickname || p.lookup_key || p.id);
+    } catch (e) { console.warn('[ops-clients] billing/mrr: price names unavailable:', e.message); }
+    const cards = (await pool.query('SELECT id, restaurant_name, email, stripe_subscription_id, stripe_customer_id, monthly_fee, status FROM clients')).rows;
+    const byId = new Map(cards.filter(c => c.stripe_subscription_id).map(c => [c.stripe_subscription_id, c]));
+    const byCust = new Map(cards.filter(c => c.stripe_customer_id).map(c => [c.stripe_customer_id, c]));
+    const byEmail = new Map(cards.filter(c => c.email).map(c => [String(c.email).toLowerCase(), c]));
+    const subs = d.data.map(su => {
+      const cust = su.customer && typeof su.customer === 'object' ? su.customer : {};
+      const item = (su.items && su.items.data && su.items.data[0]) || {};
+      const price = item.price || {};
+      const rec = price.recurring || {};
+      const per = rec.interval_count || 1;
+      const amt = ((price.unit_amount || 0) * (item.quantity || 1)) / 100;
+      const monthly = rec.interval === 'year' ? amt / (12 * per) : rec.interval === 'week' ? amt * 52 / 12 / per : amt / per;
+      const cpe = item.current_period_end || su.current_period_end;
+      const card = byId.get(su.id) || byCust.get(cust.id) || (cust.email && byEmail.get(String(cust.email).toLowerCase())) || null;
+      return {
+        subscription_id: su.id, status: su.status, cancel_at_end: !!su.cancel_at_period_end,
+        customer: cust.name || cust.email || cust.id || '—', email: cust.email || null,
+        product: priceNames.get(price.id) || price.nickname || price.lookup_key || price.id,
+        amount: amt, interval: rec.interval || null, monthly: Math.round(monthly * 100) / 100,
+        next_payment: cpe ? new Date(cpe * 1000).toISOString().slice(0, 10) : null,
+        client_id: card ? card.id : null, client_name: card ? card.restaurant_name : null,
+      };
+    }).sort((a, b) => (a.status !== 'active') - (b.status !== 'active') || String(a.next_payment || '9999').localeCompare(String(b.next_payment || '9999')));
+    const active = subs.filter(x => ['active', 'trialing', 'past_due'].includes(x.status));
+    const mrr = Math.round(active.reduce((t, x) => t + x.monthly, 0) * 100) / 100;
+    const unlinked = active.filter(x => !x.client_id);
+    res.json({ mrr, active_count: active.length, unlinked_count: unlinked.length, subscriptions: subs, pulled_at: new Date().toISOString() });
+  } catch (err) {
+    console.error('[ops-clients] billing/mrr error', err.message);
+    res.status(500).json({ error: err.message || 'Could not read subscriptions from Stripe' });
+  }
+});
+
 router.get('/billing/plans', async (req, res) => {
   try {
     const r = await stripe().prices.list({ active: true, type: 'recurring', limit: 100, expand: ['data.product'] });
@@ -505,11 +555,44 @@ router.post('/:id/billing/link-subscription', adminOnly, async (req, res) => {
        WHERE id = $1 RETURNING id, restaurant_name`,
       [id, customerId, found.id, nextBilling]
     );
-    res.json({ linked: true, client: upd.rows[0], subscription_id: found.id, customer_id: customerId });
+    const billing = await syncClientBilling(id);   // BO-BILLING-002 — write the price onto the card
+    res.json({ linked: true, client: upd.rows[0], subscription_id: found.id, customer_id: customerId, billing });
   } catch (err) {
     console.error('[ops-clients] link-subscription error', err.message);
     res.status(500).json({ error: err.message || 'Could not link subscription' });
   }
+});
+
+// BO-BILLING-002 — re-read plan / monthly fee / next billing from Stripe.
+// One client (card button) or every subscribed client (dashboard). Safe to
+// call any time; it only writes what Stripe says.
+router.post('/:id/billing/sync', adminOnly, async (req, res) => {
+  const r = await syncClientBilling(parseInt(req.params.id, 10));
+  res.status(r.synced ? 200 : 409).json(r);
+});
+// BO-BILLING-002c — attach a card to a specific live Stripe subscription
+// (for customers whose Stripe email differs from the card — Akin, Baan Rao,
+// Yum Yum). Refuses canceled subs and subs already on another card.
+router.post('/:id/billing/attach', adminOnly, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const subscriptionId = String((req.body || {}).subscription_id || '').trim();
+    if (!/^sub_/.test(subscriptionId)) return res.status(400).json({ error: 'subscription_id (sub_…) required' });
+    const other = await pool.query('SELECT id, restaurant_name FROM clients WHERE stripe_subscription_id = $1 AND id <> $2', [subscriptionId, id]);
+    if (other.rows.length) return res.status(409).json({ error: `That subscription is already on ${other.rows[0].restaurant_name}` });
+    const sub = await stripe().subscriptions.retrieve(subscriptionId);
+    if (!['active', 'trialing', 'past_due'].includes(sub.status)) return res.status(409).json({ error: `Subscription is ${sub.status}, not live` });
+    const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer && sub.customer.id;
+    await pool.query('UPDATE clients SET stripe_subscription_id = $2, stripe_customer_id = $3 WHERE id = $1', [id, subscriptionId, customerId || null]);
+    const r = await syncClientBilling(id);
+    res.status(r.synced ? 200 : 409).json(r);
+  } catch (err) {
+    console.error('[ops-clients] billing/attach error', err.message);
+    res.status(500).json({ error: err.message || 'Could not attach subscription' });
+  }
+});
+router.post('/billing/sync-all', adminOnly, async (req, res) => {
+  res.json(await syncAllStale({ all: true }));
 });
 
 // ── SEPOS-029 — onboarding wizard endpoints ────────────────────────

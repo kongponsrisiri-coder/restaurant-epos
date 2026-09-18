@@ -60,15 +60,21 @@ async function beat() {
   if (!id) return;
   try {
     const stats = await queueStats();
+    // SEPOS-REMOTE-002 — this till's RustDesk ID + password (set up by
+    // electron/main.js on Windows). Only sent with the tenant's sync secret so a
+    // stranger can't plant a fake "connect here" on the ops list.
+    const remote = (process.env.RUSTDESK_ID && process.env.SYNC_SECRET)
+      ? { rustdesk_id: process.env.RUSTDESK_ID, rustdesk_password: process.env.RUSTDESK_PASSWORD || null } : {};
     await fetch(CLOUD_API_URL.replace(/\/+$/, '') + '/api/device/heartbeat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(process.env.SYNC_SECRET ? { 'x-sync-secret': process.env.SYNC_SECRET } : {}) },
       body: JSON.stringify({
         device_id: id,
         restaurant_id: process.env.RESTAURANT_ID || null,
         app_version: process.env.APP_VERSION || null,   // injected by electron/main.js
         platform: process.platform,                     // darwin | win32 | linux
         ...stats,                                        // SEPOS-SYNC-TELEMETRY-001
+        ...remote,                                       // SEPOS-REMOTE-002
       }),
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });

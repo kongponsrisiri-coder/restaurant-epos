@@ -698,6 +698,18 @@ async function initDB() {
     // must NEVER delete the bill (revenue stays; the link just clears).
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS reservation_id INTEGER REFERENCES reservations(id) ON DELETE SET NULL`);
 
+    // SEPOS-CUSTOMER-ORDER-001 (v1.9.60) — the customer a bill belongs to, picked
+    // on the Order screen (dine-in) or auto-linked by phone (online/takeaway).
+    // Makes per-customer spend exact instead of the table+date heuristic.
+    // Nullable; ON DELETE SET NULL so removing a customer never touches revenue.
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id INTEGER`);
+    // SEPOS-CHECKBACK-001 (v1.9.60, Rumwong) — waiter check-back per course:
+    // "Arrived" marks the course served (existing colours); "Checked back" stamps
+    // these. Floor map shows a ✓ on the table once the course is checked.
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS checkback_starters_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS checkback_mains_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS checkback_desserts_at TIMESTAMP`);
+
     // SEPOS-PRO-009 — desktop till telemetry for ops. Each install POSTs a
     // heartbeat (device_id, app version, platform) here; /api/health exposes it
     // so the ops dashboard can track which tills exist, their version + last-seen.
@@ -715,6 +727,10 @@ async function initDB() {
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_depth INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_quarantined INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_oldest_at TIMESTAMP`);
+    // SEPOS-REMOTE-002 — RustDesk ID (plain) + password (AES-GCM under AUTH_SECRET) per till
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS rustdesk_id VARCHAR(32)`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS rustdesk_pw_enc TEXT`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS rustdesk_seen_at TIMESTAMP`);
 
     // SEPOS-PRINT-ALERT-001 — held tickets from failed kitchen/bar/station
     // prints (local tills only; cloud rows never created). See printAlertService.

@@ -1,0 +1,874 @@
+{
+ "ALC": [
+  {
+   "cat": "Hors d'Oeuvre",
+   "id": "starters",
+   "side": "HORS D'OEUVRE",
+   "items": [
+    [
+     "1",
+     "Sateh",
+     "Grilled tender strips of beef or chicken marinated in our special sateh seasoning, served with peanut sauce and Thai cucumber salsa",
+     "beef 9.45 · chicken 9.45"
+    ],
+    [
+     "2",
+     "Kanom Cheeb",
+     "Pork or prawn 'dim sum' made with water chestnuts, wrapped in thin pastry, steamed and served with soya sauce",
+     "pork 9.45 · prawns 10.45"
+    ],
+    [
+     "3",
+     "Roast Rib of Pork",
+     "Over 45 years, the original recipe — our signature honey-roasted red spare ribs marinated in soya sauce and a blend of special spices",
+     "9.45",
+     "",
+     true
+    ],
+    [
+     "4",
+     "Tod Man Pla",
+     "Slightly spicy Thai fish cakes made with a blend of haddock, green beans and curry paste, served with sweet chilli sauce and crushed peanut cucumber salsa",
+     "10.25"
+    ],
+    [
+     "5",
+     "Gung Sai Mai",
+     "Golden-fried prawns wrapped in crispy threads, served with sweet chilli sauce",
+     "12.45"
+    ],
+    [
+     "6",
+     "Keow Grob",
+     "Scrumptious crispy pork wontons served with sweet chilli sauce",
+     "9.45"
+    ],
+    [
+     "7",
+     "Signature Garlic & Chilli Crispy Calamari",
+     "Lightly battered calamari with fried garlic, chilli, peppers, spring onions and soya sauce",
+     "11.95"
+    ],
+    [
+     "8",
+     "Kanom Pang Na Gung",
+     "Crispy sesame prawn toast served with Thai cucumber salsa",
+     "10.95"
+    ],
+    [
+     "9",
+     "Gung Hom Pha",
+     "Marinated prawns rolled in Thai-style filo pastry, deep-fried and served with sweet chilli sauce",
+     "10.95"
+    ],
+    [
+     "10",
+     "Rumwong Spring Rolls",
+     "Hand-rolled Thai pork spring rolls made with glass noodle, bamboo shoots and beansprouts, served with sweet chilli sauce",
+     "pork 9.45 · vegetable 8.95",
+     "",
+     true
+    ],
+    [
+     "11",
+     "Gung Grabuang",
+     "Crispy crêpes filled with a blend of prawns, garlic and fresh herbs, served with sweet chilli sauce",
+     "11.95"
+    ],
+    [
+     "12",
+     "Keow Gung Hong Tae",
+     "Steamed prawn dumplings with soya sauce, sesame oil, fried garlic, spring onions and chilli oil, garnished with chilli slices and crispy wonton ribbons",
+     "10.95"
+    ],
+    [
+     "12A",
+     "Kow Grieb Tod",
+     "A mouth-watering selection of plain and slightly spicy prawn crackers served with peanut dip — irresistible nibbles to start your meal",
+     "mixed 4.95 · spicy 5.45",
+     "n"
+    ],
+    [
+     "",
+     "Specially Selected Starters",
+     "A selection of our most popular starters: chicken sateh, roast rib of pork, pork dim sum, fish cake, crispy prawn roll and prawn crackers, served with peanut sauce, sweet chilli dips and peanut cucumber salsa",
+     "11.95 per person",
+     "nc"
+    ]
+   ],
+   "note": "Extra sauce 1.75 · extra condiment 1.75 · extra chilli oil 2.25"
+  },
+  {
+   "cat": "Soups",
+   "id": "soups",
+   "side": "SOUPS",
+   "items": [
+    [
+     "14",
+     "Tom Yum Kai",
+     "Clear aromatic soup made with chicken, mushrooms, lemongrass, kaffir lime leaves, galangal, shallots, coriander, chilli and a final squeeze of lime juice. A creamy version is also available with coconut milk and extra chilli oil",
+     "clear 10.65 · creamy 10.95",
+     "sc"
+    ],
+    [
+     "15",
+     "Tom Yum Gung",
+     "A prawn version of the clear tom yum soup with mushrooms, lemongrass, kaffir lime leaves, galangal, shallots, coriander, chilli and lime juice. The creamy version is equally delicious with coconut milk and a touch of chilli oil",
+     "clear 12.65 · creamy 12.95",
+     "sc"
+    ],
+    [
+     "16",
+     "Tom Khar Kai",
+     "Distinctive chicken soup 'tom yum' style made with galangal, mushrooms, coconut milk, lemongrass, kaffir lime leaves, shallots, coriander, chilli and a hint of lime juice",
+     "10.65"
+    ],
+    [
+     "17",
+     "Poh-Taek",
+     "Special seafarer's soup served in a simmering hotpot at the table (minimum 2 persons). Prepared just like the tom yum soup with mushrooms, lemongrass, kaffir lime leaves, galangal, shallots, coriander, chilli and selected seafood such as squid, prawns, scallops and fish",
+     "12.95 per person",
+     "sc"
+    ]
+   ]
+  },
+  {
+   "cat": "Salads",
+   "id": "salads",
+   "side": "SALADS",
+   "items": [
+    [
+     "18",
+     "Yum Pla Muek",
+     "Softly cooked squid, spring onions, carrots, lemongrass, kaffir lime leaves, onions, shallots and chillies tossed in our spicy salad dressing with a final garnish of coriander",
+     "13.45",
+     "s"
+    ],
+    [
+     "19",
+     "Yum Nua",
+     "Grilled beef slices mixed with onions, carrots, shallots, chillies, kaffir lime leaves, coriander, spring onions and a splash of hot & sour dressing (cooking time 20 mins)",
+     "14.45",
+     "sc"
+    ],
+    [
+     "20",
+     "Plah Gung",
+     "A slightly spicy grilled prawn salad with lemongrass, kaffir lime leaves, spring onions, onions, carrots, shallots, chillies and coriander",
+     "14.95",
+     "s"
+    ],
+    [
+     "21",
+     "Yum Talay Samunpai",
+     "Tenderly blanched seafood — prawns, squid and scallops — tossed in a slightly spicy dressing with fresh Thai herbs and spices: lemongrass, kaffir lime leaves, spring onions, carrots, shallots, ginger and onions",
+     "14.95",
+     "s"
+    ],
+    [
+     "22",
+     "Larb Ped",
+     "Char-grilled roast duck, shallots, onions, carrots, spring onions and ginger tossed in spicy chilli oil and lime dressing, coriander, roasted ground rice and crispy fried shallots",
+     "13.45",
+     "sc"
+    ],
+    [
+     "23",
+     "Yum Woon Sen",
+     "Spicy glass noodle salad with spring onions, carrots, onions, shallots, tomatoes and coriander, with a choice of prawns, minced pork or minced chicken",
+     "pork or chicken 11.45 · prawns 12.95",
+     "s"
+    ],
+    [
+     "24",
+     "Som Tum Gung Sod",
+     "A prawn version of the Thai papaya salad made with chillies, green beans, tomatoes and carrots, topped with roasted peanuts",
+     "13.95",
+     "ns"
+    ],
+    [
+     "25",
+     "Som Tum",
+     "The famous Thai papaya salad made with slightly crushed green beans, tomatoes, carrots and chillies, topped with roasted peanuts. We recommend ordering BBQ chicken (No. 41) and sticky rice (No. 89) with this dish",
+     "11.95",
+     "nsc"
+    ],
+    [
+     "26",
+     "Samunpai Smoke Salmon",
+     "Thai-style spicy smoked salmon ceviche with lemongrass, fresh lime juice, chillies, mint, avocado, peppers, cashew nuts, carrots and red cabbage, served with fluffy rice crackers",
+     "14.45",
+     "nsc"
+    ]
+   ]
+  },
+  {
+   "cat": "Curries",
+   "id": "curries",
+   "side": "CURRIES",
+   "items": [
+    [
+     "27",
+     "Gaeng Ped Kai",
+     "Red chicken curry with coconut milk, bamboo shoots, courgette and peppers",
+     "13.95"
+    ],
+    [
+     "28",
+     "Gaeng Keaw Wan Kai",
+     "Popular green chicken curry with coconut milk, bamboo shoots, green beans, courgette, peppers and sweet basil",
+     "13.95"
+    ],
+    [
+     "29",
+     "Gaeng Ped Nua",
+     "Red beef curry with coconut milk, bamboo shoots, courgette and peppers",
+     "14.45"
+    ],
+    [
+     "30",
+     "Gaeng Keaw Wan Nua",
+     "Green beef curry with coconut milk, bamboo shoots, green beans, courgette, peppers and sweet basil",
+     "14.45"
+    ],
+    [
+     "31",
+     "Gaeng Keaw Wan Gung",
+     "Succulent whole king prawns in green curry with coconut milk, bamboo shoots, green beans, courgette, peppers and sweet basil",
+     "15.95"
+    ],
+    [
+     "32",
+     "Gaeng Keaw Wan Pla",
+     "Crispy battered tilapia fillets cooked in our green curry sauce with bamboo shoots, green beans, courgette, peppers and sweet basil",
+     "14.95"
+    ],
+    [
+     "33",
+     "Gaeng Ped Yang",
+     "Tender slices of roast duck topped with creamy red curry sauce, lychee, pineapple, cherry tomatoes, peppers and kaffir lime leaves",
+     "14.95"
+    ]
+   ]
+  },
+  {
+   "cat": "Chicken",
+   "id": "chicken",
+   "side": "MAIN COURSE",
+   "items": [
+    [
+     "34",
+     "Praew Wan Kai",
+     "Chicken sautéed with juicy chunks of pineapple, mushrooms, tomatoes, spring onions, cucumber and sweet & sour sauce",
+     "13.95"
+    ],
+    [
+     "35",
+     "Kai Pud Bai Horapa",
+     "Chicken stir-fry with chillies, bamboo shoots, onions, green beans, oyster sauce and basil leaves",
+     "13.95"
+    ],
+    [
+     "36",
+     "Kai Pud Kaprow",
+     "Popular spicy Thai stir-fry made with minced chicken, green beans, fresh chillies, peppers, oyster sauce and basil leaves",
+     "13.95"
+    ],
+    [
+     "37",
+     "Kai Pud Nam-Man Hoi",
+     "Chicken lightly stir-fried with mushroom, spring onions and oyster sauce",
+     "13.95"
+    ],
+    [
+     "38",
+     "Kai Pud Med Mamuang",
+     "Chicken stir-fry with roasted cashew nuts, mushrooms, onions, spring onions and peppers",
+     "13.95",
+     "nc"
+    ],
+    [
+     "39",
+     "Kai Grob Pud Prig Hang",
+     "Crispy battered chicken pieces, dried chillies, kaffir lime leaves, lemongrass and cashew nuts smothered in a mouth-watering sticky sauce",
+     "14.95",
+     "nc"
+    ],
+    [
+     "40",
+     "Kai Pud Asparagus",
+     "Stir-fried chicken with fresh asparagus, mushroom, spring onions and oyster sauce",
+     "14.50"
+    ],
+    [
+     "41",
+     "Kai Yang",
+     "Popular BBQ chicken marinated with coriander, garlic and soya sauce then lightly barbecued, served with sweet chilli sauce (cooking time 20 mins). We recommend Som Tum (No. 25) and sticky rice (No. 89) with this dish",
+     "15.95",
+     "c"
+    ]
+   ]
+  },
+  {
+   "cat": "Pork",
+   "id": "pork",
+   "side": "MAIN COURSE",
+   "items": [
+    [
+     "42",
+     "Moo Yang Nam-Pung",
+     "BBQ pork marinated in honey, soya sauce and sesame seeds, served with sweet chilli sauce (cooking time 20 mins)",
+     "15.95"
+    ],
+    [
+     "43",
+     "Moo Pud Kaprow",
+     "Popular spicy Thai stir-fry made with minced pork, green beans, fresh chillies, oyster sauce, peppers and basil leaves",
+     "13.95",
+     "sc"
+    ],
+    [
+     "44",
+     "Moo Pud Med Mamuang",
+     "Pork stir-fry with roasted cashew nuts, mushrooms, onions, spring onions, oyster sauce and peppers",
+     "13.95",
+     "n"
+    ],
+    [
+     "45",
+     "Thai Moo Daeng",
+     "Thai-style char siu roast red pork with aromatic sesame sauce and fresh cucumber slices, served with soya sauce",
+     "14.50",
+     "nc"
+    ]
+   ]
+  },
+  {
+   "cat": "Beef",
+   "id": "beef",
+   "side": "MAIN COURSE",
+   "items": [
+    [
+     "46",
+     "Nua Pud Prig",
+     "Stir-fried beef with oyster sauce and a choice of chillies or green peppers, or both",
+     "14.95"
+    ],
+    [
+     "47",
+     "Nua Pud Kaprow",
+     "Popular spicy Thai stir-fry made with minced beef, green beans, fresh chillies, peppers and hot basil leaves",
+     "14.95"
+    ],
+    [
+     "48",
+     "Nua Pud Pak",
+     "Beef stir-fried with broccoli and oyster sauce",
+     "14.95"
+    ],
+    [
+     "49",
+     "Nua Pud Nam-Man Hoi",
+     "Beef lightly stir-fried with oyster sauce, mushrooms and spring onions",
+     "14.95"
+    ]
+   ]
+  },
+  {
+   "cat": "Prawns",
+   "id": "prawns",
+   "side": "MAIN COURSE",
+   "items": [
+    [
+     "50",
+     "Gung Kluk Gratiem",
+     "Lightly battered prawns, deep-fried and topped with aromatic garlic, coriander and pepper sauce",
+     "16.95"
+    ],
+    [
+     "51",
+     "Gung Pud Sauce Lychee",
+     "Prawn stir-fry with lychee, peppers, carrots, baby corn and our sweet & sour sauce",
+     "16.50"
+    ],
+    [
+     "52",
+     "Gung Tod",
+     "Delicious deep-fried battered prawns marinated in our special blend of herbs and spices, served with sweet chilli sauce",
+     "15.95"
+    ],
+    [
+     "53",
+     "Gung Pud Asparagus",
+     "Prawns stir-fried with fresh asparagus, spring onions, oyster sauce and mushrooms",
+     "16.50"
+    ],
+    [
+     "54",
+     "Gung Choop Pang Tod",
+     "Crispy prawn tempura served with sweet chilli sauce",
+     "16.50"
+    ],
+    [
+     "55",
+     "Gung Pud Namprig Pao",
+     "King prawns sautéed in roasted sweet chilli sauce with sweet basil and red and green peppers",
+     "16.95"
+    ],
+    [
+     "56",
+     "Gung Pud Kaprow",
+     "Typical spicy Thai stir-fry made with prawns, green beans, fresh chillies, oyster sauce, peppers and basil leaves",
+     "15.95"
+    ],
+    [
+     "57",
+     "Gung Ob Mor Din",
+     "Delicious prawn hotpot with stir-fried glass noodles, ginger, celery, spring onions and a touch of soya sauce",
+     "16.95"
+    ],
+    [
+     "58",
+     "Gung Kaew Samunpai",
+     "Crispy battered prawns, cashew nuts, kaffir lime leaves, lemongrass and dried chillies smothered in a mouth-watering sweet chilli sauce",
+     "18.95",
+     "nc"
+    ],
+    [
+     "59",
+     "Chu Chi Gung",
+     "Lightly battered king prawns topped with a creamy sauce made with coconut milk, chilli paste and kaffir lime leaves",
+     "18.50",
+     "c"
+    ]
+   ]
+  },
+  {
+   "cat": "Fish",
+   "id": "fish",
+   "side": "MAIN COURSE",
+   "items": [
+    [
+     "60",
+     "Praew Wan Pla",
+     "Lightly battered tilapia fillets sautéed with juicy chunks of pineapple, tomatoes, cucumber, mushrooms, spring onions and a sweet & sour sauce",
+     "15.95"
+    ],
+    [
+     "61",
+     "Pla Rad Prig",
+     "Crispy sea bass topped with a tasty chilli and green pepper sauce. Please note: this dish may contain some small bones",
+     "23.95",
+     "",
+     true
+    ],
+    [
+     "62",
+     "Pla Samunpai",
+     "Deep-fried sea bass topped with chopped lemongrass, kaffir lime leaves, fresh ginger, shallots, roasted peanuts and sweet palm dressing. May contain some small bones",
+     "24.50",
+     "nc"
+    ],
+    [
+     "63",
+     "Pla Nueng See-Iew",
+     "Steamed sea bass in a light soya sauce garnished with spring onions, celery, peppers and fresh ginger (cooking time 20 mins). May contain some small bones",
+     "24.50",
+     "c"
+    ],
+    [
+     "64",
+     "Pla Tod Samrod",
+     "A mouth-watering fish dish made with crispy fillets of battered tilapia topped with sweet chilli sauce",
+     "15.95"
+    ],
+    [
+     "65",
+     "Pla Pud Kaprow",
+     "Deep-fried battered tilapia fillets, green beans, fresh chillies, oyster sauce, peppers and basil leaves",
+     "15.95",
+     "sc"
+    ]
+   ]
+  },
+  {
+   "cat": "Seafood",
+   "id": "seafood",
+   "side": "MAIN COURSE",
+   "items": [
+    [
+     "66",
+     "Talay Pud Nam-Man Hoi",
+     "Prawns, squid and scallops stir-fried with mushrooms, green beans, spring onions, carrots and oyster sauce",
+     "16.95"
+    ],
+    [
+     "67",
+     "Talay Pud Namprig Pao",
+     "Prawns, scallops and squid sautéed in roasted sweet chilli sauce with red and green peppers",
+     "16.95",
+     "sc"
+    ],
+    [
+     "68",
+     "Talay Pud Kaprow",
+     "Spicy stir-fry of prawns, scallops and squid with green beans, fresh chillies, oyster sauce, peppers and basil leaves",
+     "16.95"
+    ]
+   ]
+  },
+  {
+   "cat": "Duck",
+   "id": "duck",
+   "side": "MAIN COURSE",
+   "items": [
+    [
+     "69",
+     "Ped Yang",
+     "Rumwong's special roast duck served off the bone with soya sauce, pickled ginger, steamed Chinese cabbage, fresh cucumber slices and our signature aromatic sauce",
+     "16.95",
+     "",
+     true
+    ],
+    [
+     "70",
+     "Ped Pud Med Mamuang",
+     "Slices of duck stir-fried with roasted cashew nuts, spring onions, onions, mushrooms, oyster sauce and peppers",
+     "15.95"
+    ],
+    [
+     "71",
+     "Ped Pud Kaprow",
+     "Typical spicy Thai dish made with slices of duck stir-fried with spring onions, onions, fresh chillies, peppers, oyster sauce and basil leaves",
+     "15.95"
+    ],
+    [
+     "72",
+     "Praew Wan Ped",
+     "Duck stir-fry with juicy chunks of pineapple, mango, tomatoes, onions, peppers and sweet & sour sauce",
+     "15.95"
+    ]
+   ]
+  },
+  {
+   "cat": "Side Dishes",
+   "id": "sides",
+   "side": "SIDE DISHES",
+   "items": [
+    [
+     "73",
+     "Song Sa-Hi Nam-Man Nga",
+     "Fresh asparagus and mushrooms lightly seasoned and stir-fried in sesame oil, garnished with sesame seeds",
+     "10.95"
+    ],
+    [
+     "74",
+     "Puk Choi Pud Nam-Man Hoi",
+     "Pak choi sautéed in oyster sauce with a hint of fresh chilli and garlic",
+     "11.50"
+    ],
+    [
+     "75",
+     "Pud Pak",
+     "Seasonal vegetables stir-fried in oyster sauce until slightly crunchy",
+     "10.50"
+    ],
+    [
+     "711",
+     "Pak Boong Fai Daeng",
+     "Flash-fried morning glory in soya beans, oyster sauce, fresh chilli and garlic",
+     "11.95"
+    ],
+    [
+     "722",
+     "Kai Jiew",
+     "Thai-style omelette — the perfect accompaniment to any dish — with sweet basil and chilli, with minced pork, or with diced prawns",
+     "basil & chilli 10.95 · minced pork 10.95 · prawns 11.95"
+    ]
+   ]
+  },
+  {
+   "cat": "One-plate dishes “Jarn Diew”",
+   "id": "oneplate",
+   "side": "RICE / NOODLES",
+   "items": [
+    [
+     "76",
+     "Kao Pud Rumwong",
+     "Rumwong's special fried rice with chicken, prawns, spring onions, coriander, eggs and sultanas",
+     "15.50",
+     "",
+     true
+    ],
+    [
+     "77",
+     "Kao Pud",
+     "Fried rice with dark soya sauce, spring onions, eggs and coriander, with a choice of chicken, pork or beef, or prawns",
+     "chicken, pork or beef 13.95 · prawns 15.95"
+    ],
+    [
+     "78",
+     "Kao Pud Supparod",
+     "Pineapple fried rice with prawns, peas, carrots, green beans, spring onions, sweetcorn, onions, peppers and eggs, garnished with coriander",
+     "15.95"
+    ],
+    [
+     "79",
+     "Pud Gaeng Keaw Wan",
+     "A choice of plain rice or egg noodles stir-fried with green curry sauce, chicken, green beans and peppers — a popular contemporary twist on the traditional green curry",
+     "rice 13.95 · noodles 14.50"
+    ],
+    [
+     "80",
+     "Kao Nar Ped",
+     "Rumwong's special roast duck rice served with our secret aromatic sauce, pickled ginger and fresh cucumber slices",
+     "14.95"
+    ],
+    [
+     "81",
+     "Kao Rad Gaeng",
+     "The popular chicken or beef green curry served on a bed of steamed jasmine rice",
+     "chicken 14.50 · beef 14.95"
+    ],
+    [
+     "82",
+     "Pud Thai",
+     "Famous Thai noodle dish with beansprouts, peanuts, chopped salted turnips, spring onions, coriander, eggs and chicken",
+     "14.50"
+    ],
+    [
+     "83",
+     "Pud Thai Gung Sod",
+     "Our signature version of the famous pud Thai noodle with tamarind sauce and king prawns",
+     "15.95",
+     "",
+     true
+    ],
+    [
+     "84",
+     "Sen Mee Rad Nar",
+     "Lightly sautéed rice vermicelli topped with our special gravy sauce, seasonal greens, broccoli and carrots, with a choice of chicken, pork, beef or prawns",
+     "chicken, pork or beef 13.95 · prawns 15.95"
+    ],
+    [
+     "85",
+     "Mee Grob Rad Nar",
+     "Crispy egg noodles topped with our special gravy sauce, seasonal greens, broccoli and carrots, with a choice of chicken, pork, beef or prawns",
+     "chicken, pork or beef 13.95 · prawns 15.95"
+    ],
+    [
+     "86",
+     "Pud See-Iew",
+     "Rice vermicelli noodle stir-fry with dark soy, eggs, seasonal greens and broccoli, with a choice of chicken, pork, beef or prawns",
+     "chicken, pork or beef 13.95 · prawns 15.95",
+     "c"
+    ]
+   ]
+  },
+  {
+   "cat": "Rice & Noodles",
+   "id": "rice",
+   "side": "RICE / NOODLES",
+   "items": [
+    [
+     "87",
+     "Kao Suey",
+     "Steamed jasmine rice",
+     "3.95"
+    ],
+    [
+     "88",
+     "Kao Pad Khai",
+     "Egg fried rice",
+     "4.95"
+    ],
+    [
+     "89",
+     "Kao Niew",
+     "Sticky rice with a hint of coconut milk",
+     "4.95",
+     "c"
+    ],
+    [
+     "90",
+     "Koew Tiew Pud",
+     "Plain egg noodles with a touch of soya sauce, oyster sauce, beansprouts and seasonal greens",
+     "7.95",
+     "c"
+    ],
+    [
+     "91",
+     "Koew Tiew Pud Khai",
+     "Plain egg noodles with a touch of soya sauce, oyster sauce, beansprouts, seasonal greens and eggs",
+     "8.95",
+     "c"
+    ],
+    [
+     "92",
+     "Kao Ob Khing",
+     "Plain aromatic fried rice with fried ginger",
+     "4.95",
+     "c"
+    ],
+    [
+     "93",
+     "Kai Dao",
+     "Crispy fried egg",
+     "2.85"
+    ]
+   ]
+  }
+ ],
+ "VEG": [
+  {
+   "cat": "Hors d'Oeuvre",
+   "items": [
+    [
+     "Vegetarian Spring Rolls",
+     "Thai vegetarian spring rolls served with sweet chilli sauce",
+     "8.95"
+    ],
+    [
+     "Pak Tod",
+     "Crispy vegetable tempura with sweet chilli sauce",
+     "9.95"
+    ],
+    [
+     "Larb Tao Hu",
+     "Spicy deep-fried tofu salad with lime dressing",
+     "10.30",
+     "vg"
+    ],
+    [
+     "Tom Kha Tao Hu",
+     "Tofu and coconut milk soup with mushrooms, lemongrass, kaffir lime leaves, galangal, shallots, coriander, chilli and lime juice",
+     "10.30",
+     "vg"
+    ],
+    [
+     "Tom Yum Hed",
+     "Clear aromatic mushroom soup flavoured with lemongrass, kaffir lime leaves and a final squeeze of lime juice — clear or creamy",
+     "9.50",
+     "vg"
+    ]
+   ]
+  },
+  {
+   "cat": "Curries",
+   "items": [
+    [
+     "Tao Hu Sauce Chu Chi",
+     "Crispy fried chunks of tofu topped with creamy coconut curry sauce and kaffir lime leaves, served with flash-fried pak choi",
+     "13.95",
+     "vg"
+    ],
+    [
+     "Gaeng Lychee Tao Hu",
+     "Tofu, lychee, pineapple, mushroom, bamboo and peppers cooked in a creamy curry sauce",
+     "13.50",
+     "vg"
+    ],
+    [
+     "Gaeng Pak",
+     "Red or green vegetable curry with coconut milk, bamboo, mushroom and peppers",
+     "11.45 · with tofu 13.50",
+     "vg"
+    ]
+   ]
+  },
+  {
+   "cat": "Main Course",
+   "items": [
+    [
+     "Praew Wan Pak",
+     "Assorted vegetables sautéed with juicy chunks of pineapple and sweet & sour sauce",
+     "11.45 · with tofu 13.50",
+     "vg"
+    ],
+    [
+     "Tao Hu Pud Med Mamuang",
+     "Tofu, roasted cashew nuts, mushrooms, ginger, onion and peppers lightly sautéed in soya sauce",
+     "13.50",
+     "vg"
+    ],
+    [
+     "Tao Hu Pud Kaprow",
+     "A spicy Thai dish made with tofu, onions, green beans, fresh chillies, peppers and hot basil",
+     "13.50",
+     "vg"
+    ],
+    [
+     "Pud Puk",
+     "Seasonal vegetables stir-fried in soya sauce until slightly crunchy",
+     "10.50",
+     "vg"
+    ],
+    [
+     "Song Sa-Hi Namman Nga",
+     "Fresh asparagus and mushrooms lightly seasoned and stir-fried in sesame oil",
+     "10.95 · with tofu 13.50",
+     "vg"
+    ],
+    [
+     "Puk Choi Namman Hoi",
+     "Pak choi sautéed in soya sauce with a hint of fresh chilli and garlic",
+     "11.50 · with tofu 13.50",
+     "vg"
+    ]
+   ]
+  },
+  {
+   "cat": "Rice & Noodles",
+   "items": [
+    [
+     "Kao Pud Rumwong",
+     "Rumwong's special fried rice with raisins, peas, carrots, green beans, spring onions, sweetcorn, onions and peppers, garnished with coriander",
+     "11.95 · with eggs 13.50",
+     "vg"
+    ],
+    [
+     "Kao Pud Pak Ruam",
+     "Fried rice with assorted vegetables in soya sauce",
+     "11.95 · with eggs 13.50",
+     "vg"
+    ],
+    [
+     "Kao Pud Supparod",
+     "Pineapple fried rice with peas, carrots, green beans, spring onions, sweetcorn, onions and peppers",
+     "11.95 · with eggs 13.50",
+     "vg"
+    ],
+    [
+     "Pud Thai",
+     "The famous fried noodle dish with beansprouts, peanuts and chopped salted turnips",
+     "12.50 · with eggs 13.95",
+     "vg"
+    ],
+    [
+     "Tao Hu Pud Thai",
+     "Rumwong's signature pud Thai made with chunky tofu, beansprouts, peanuts and salted turnips",
+     "12.95 · with eggs 14.50",
+     "vg"
+    ],
+    [
+     "Pud See-Iew",
+     "Rice vermicelli, soya sauce, seasonal greens and broccoli",
+     "12.50 · with eggs 13.95",
+     "vg"
+    ],
+    [
+     "Sen Mee Rad Nar",
+     "Lightly sautéed rice vermicelli topped with our special gravy sauce, seasonal greens, broccoli and carrots",
+     "12.95",
+     "vg"
+    ],
+    [
+     "Mee Grob Rad Nar",
+     "Crispy egg noodles topped with our special gravy sauce, seasonal greens, broccoli and carrots",
+     "12.95",
+     "vg"
+    ]
+   ]
+  }
+ ]
+}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
-import { C, card, btn, input, label, fmtRelTime, fmtMoney, PLAN_LABEL, STATUS_STYLE, productBadge } from '../theme.js';
+import { C, card, btn, input, label, fmtRelTime, fmtMoney, PLAN_LABEL, planLabel, STATUS_STYLE, productBadge } from '../theme.js';
 import StatusPill from '../components/StatusPill.jsx';
 import HealthDot from '../components/HealthDot.jsx';
 
@@ -33,11 +33,15 @@ export default function DashboardPage() {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  // BO-BILLING-002 — MRR comes from Stripe (the truth), like the Control Room;
+  // the card sum is only the fallback when Stripe can't be read.
+  const [stripeMrr, setStripeMrr] = useState(null);
   const load = async () => {
     setLoading(true);
     try { setClients(await api.listClients()); }
     catch { setClients([]); }
     finally { setLoading(false); }
+    try { setStripeMrr(await api.getStripeMrr()); } catch { setStripeMrr(null); }
   };
   useEffect(() => { load(); }, []);
   useEffect(() => { const t = setInterval(load, 30000); return () => clearInterval(t); }, []);
@@ -74,6 +78,9 @@ export default function DashboardPage() {
           </p>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
+          {/* BO-BILLING-002 — re-read every card from its live Stripe subscription. */}
+          <button onClick={async () => { try { const r = await api.syncAllBilling(); await load(); window.alert(`Synced ${r.synced}/${r.checked} cards from Stripe`); } catch (e) { window.alert(e.message); } }}
+            style={{ ...btn.ghost, fontSize: 13 }} title="Re-read plan, fee and next billing for every card from Stripe">↻ Sync from Stripe</button>
           {/* BO-FOUNDER-001 — copy the invite-only Founder's Pack self-pay kiosk link. */}
           <button
             onClick={copyFounderLink}
@@ -91,7 +98,12 @@ export default function DashboardPage() {
 
       {/* Stat tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 28 }}>
-        <StatTile label="Active subs"  value={activeSubs}         sub={`${fmtMoney(totalMRR)} MRR`}    accent={C.success} />
+        <StatTile label="Active subs"
+          value={stripeMrr && stripeMrr.mrr != null ? stripeMrr.active_count : activeSubs}
+          sub={stripeMrr && stripeMrr.mrr != null
+            ? `${fmtMoney(stripeMrr.mrr)} MRR · from Stripe${stripeMrr.unlinked_count ? ` · ${stripeMrr.unlinked_count} not on a card` : ''}`
+            : `${fmtMoney(totalMRR)} MRR · from cards (Stripe unavailable)`}
+          accent={C.success} />
         <StatTile label="On trial"     value={counts.trial  || 0}                                      accent={C.info} />
         <StatTile label="In setup"     value={counts.setup  || 0}                                      accent={C.warning} />
         <StatTile label="Online now"   value={onlineCount}        sub={`/ ${clients.length} total`}    accent={C.gold} />
@@ -179,7 +191,7 @@ function ClientCard({ client, onClick }) {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 12 }}>
-        <Metric label="Plan" value={PLAN_LABEL[client.plan] || client.plan || '—'} />
+        <Metric label="Plan" value={planLabel(client)} />
         <Metric label="MRR" value={client.monthly_fee ? fmtMoney(client.monthly_fee) : '—'} />
         <Metric label="Orders today" value={client.last_orders_today ?? '—'} accent={client.last_orders_today > 0 ? C.success : null} />
       </div>

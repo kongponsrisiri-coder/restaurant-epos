@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v178'; // v178: v1.9.59 — add payment/deposit to a closed bill + £0 bills stay visible
+const CACHE_NAME = 'siamepos-shell-v182'; // v182: v1.9.63 — Arrived button available without Call
 const APP_SHELL = [
   '/',
   '/index.html',

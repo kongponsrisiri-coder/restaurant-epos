@@ -270,6 +270,28 @@ function resolveRestaurantId(req) {
 // so a shift can span midnight / two nights free of the timezone day boundary.
 const OPEN_SESSION_SUBQ = "(SELECT ts.id FROM till_sessions ts WHERE ts.status='open' AND ts.restaurant_id = orders.restaurant_id ORDER BY ts.opened_at DESC LIMIT 1)";
 
+// SEPOS-SYNC-TIMESTAMP-001 — a till replaying its queue (after an outage or a
+// stalled push) sends the ORIGINAL opened_at / closed_at / fired_at of the
+// order. Yum Yum's week-long stall (SEPOS-PUSH-STALL-001) drained on 6 Sep
+// and the cloud stamped all 318 orders with the PUSH time, so a week of cloud
+// history sits on the wrong day. Receivers now honour a supplied timestamp
+// and fall back to NOW() when it is absent (old tills), unparsable, or more
+// than 5 minutes in the future (a till with a wrong clock must not post-date
+// the cloud's books). Returned as ISO 8601 UTC; the cast below turns it into
+// the same wall-clock NOW() would have written on this backend.
+function syncTs(v) {
+  if (v == null || v === '') return null;
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return null;
+  if (d.getTime() - Date.now() > 5 * 60 * 1000) return null;
+  return d.toISOString();
+}
+// PG: ::timestamptz → assigned into the TIMESTAMP column through the session
+// time zone, exactly like NOW(). SQLite: datetime(?) of an ISO 'Z' string
+// yields naive UTC, exactly like CURRENT_TIMESTAMP (the adapter does not
+// translate ::timestamptz, hence the switch).
+const SYNC_TS_CAST = process.env.DB_MODE === 'local' ? '::timestamp' : '::timestamptz';
+
 // SEPOS-AUTO-SESSION-001 — open a till session automatically at the day's
 // first sale if none is open. A shift the staff open late (or not at all)
 // leaves paid bills outside every Z's session window — the money is in the
@@ -1432,7 +1454,7 @@ app.get('/api/health', async (req, res) => {
     // Wrapped separately so a missing devices table (older deploy) never breaks health.
     let tills = [];
     try {
-      const d = await pool.query(`SELECT device_id, app_version, platform, last_seen, queue_depth, queue_quarantined, queue_oldest_at FROM devices ORDER BY last_seen DESC`);
+      const d = await pool.query(`SELECT device_id, app_version, platform, last_seen, queue_depth, queue_quarantined, queue_oldest_at, rustdesk_id FROM devices ORDER BY last_seen DESC`);
       tills = d.rows.map(r => ({
         device_id: r.device_id,
         app_version: r.app_version,
@@ -1441,6 +1463,7 @@ app.get('/api/health', async (req, res) => {
         queue_depth: r.queue_depth ?? 0,               // SEPOS-SYNC-TELEMETRY-001
         queue_quarantined: r.queue_quarantined ?? 0,
         queue_oldest_at: r.queue_oldest_at ?? null,
+        rustdesk_id: r.rustdesk_id ?? null,             // SEPOS-REMOTE-002 (id only — password stays behind admin auth)
       }));
     } catch (_) { /* devices table not present yet */ }
     res.json({
@@ -1460,6 +1483,68 @@ app.get('/api/health', async (req, res) => {
 // + every few minutes so ops can see which tills exist, their version, platform
 // and last-seen. Ungated telemetry (device_id is the PK → repeated calls just
 // upsert one row). Field lengths capped defensively.
+// SEPOS-REMOTE-002 — per-till RustDesk password at rest: AES-256-GCM under a
+// key derived from this tenant's AUTH_SECRET. Only the admin endpoint below
+// decrypts; /api/health never carries the password.
+function remoteKey() { return crypto.createHash('sha256').update('siamepos-remote:' + AUTH_SECRET).digest(); }
+function remoteEncrypt(text) {
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv('aes-256-gcm', remoteKey(), iv);
+  const enc = Buffer.concat([c.update(String(text), 'utf8'), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), enc]).toString('base64');
+}
+function remoteDecrypt(b64) {
+  try {
+    const buf = Buffer.from(String(b64), 'base64');
+    const d = crypto.createDecipheriv('aes-256-gcm', remoteKey(), buf.subarray(0, 12));
+    d.setAuthTag(buf.subarray(12, 28));
+    return Buffer.concat([d.update(buf.subarray(28)), d.final()]).toString('utf8');
+  } catch { return null; }
+}
+
+// Owner/manager view: which tills of THIS restaurant can be reached remotely.
+app.get('/api/devices/remote', requireStaffAuth(['admin', 'manager']), async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT device_id, app_version, platform, last_seen, rustdesk_id, rustdesk_pw_enc, rustdesk_seen_at FROM devices ORDER BY last_seen DESC`);
+    res.json(r.rows.map(d => ({
+      device_id: d.device_id, app_version: d.app_version, platform: d.platform, last_seen: d.last_seen,
+      rustdesk_id: d.rustdesk_id || null,
+      rustdesk_password: d.rustdesk_pw_enc ? remoteDecrypt(d.rustdesk_pw_enc) : null,
+      rustdesk_seen_at: d.rustdesk_seen_at || null,
+    })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-REMOTE-002 — manual (re)run of the RustDesk setup from Admin → Settings on
+// THIS till (Windows desktop only). Same elevated script the app runs at launch;
+// the UAC prompt appears on the till, then the ID/password are re-read and
+// heartbeated straight away. Cloud / Mac / browser tills get a friendly 400.
+app.post('/api/remote/setup', requireStaffAuth(['admin', 'manager']), async (req, res) => {
+  try {
+    const script = process.env.RUSTDESK_SETUP_SCRIPT, stateFile = process.env.RUSTDESK_STATE_FILE;
+    if (process.platform !== 'win32' || !script || !stateFile) {
+      return res.status(400).json({ error: 'Remote support setup runs on the Windows till itself — open Admin → Settings on that till.' });
+    }
+    const fs = require('fs'), { spawn } = require('child_process');
+    if (!fs.existsSync(script)) return res.status(400).json({ error: 'Setup script missing — reinstall the till app.' });
+    await new Promise((resolve) => {
+      const ps = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-Command',
+        `Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${script}"'`],
+        { windowsHide: true, stdio: 'ignore' });
+      const t = setTimeout(() => { try { ps.kill(); } catch {} resolve(); }, 4 * 60 * 1000);
+      ps.on('exit', () => { clearTimeout(t); resolve(); }); ps.on('error', () => { clearTimeout(t); resolve(); });
+    });
+    let st = null;
+    try { st = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch {}
+    if (!st || !st.id || !st.password) {
+      return res.status(409).json({ error: 'Setup did not complete — was the Windows permission prompt accepted, and is the till online?' });
+    }
+    process.env.RUSTDESK_ID = st.id; process.env.RUSTDESK_PASSWORD = st.password;
+    try { await heartbeatClient.beat(); } catch {}
+    res.json({ success: true, rustdesk_id: st.id });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/device/heartbeat', async (req, res) => {
   try {
     const { device_id, app_version, platform } = req.body || {};
@@ -1484,6 +1569,18 @@ app.post('/api/device/heartbeat', async (req, res) => {
        String(app_version || '').slice(0, 20), String(platform || '').slice(0, 20),
        qDepth, qQuar, qOldest]
     );
+    // SEPOS-REMOTE-002 — remote-support details ride the heartbeat, but only
+    // when the request proves it comes from the till (tenant sync secret) —
+    // otherwise anyone could plant a "connect here" pointing at their own PC.
+    const secretOk = !!process.env.SYNC_SECRET && (req.get('x-sync-secret') || '') === process.env.SYNC_SECRET;
+    const rdId = String(req.body?.rustdesk_id || '').trim();
+    if (secretOk && /^\d{6,12}$/.test(rdId)) {
+      const pw = String(req.body?.rustdesk_password || '');
+      await pool.query(
+        `UPDATE devices SET rustdesk_id = $1, rustdesk_pw_enc = $2, rustdesk_seen_at = CURRENT_TIMESTAMP WHERE device_id = $3`,
+        [rdId, pw ? remoteEncrypt(pw) : null, String(device_id).slice(0, 64)]
+      );
+    }
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1571,6 +1668,7 @@ async function openDineInOrderDeduped({ tableId, covers, staffId }) {
 app.post('/api/orders', requireActiveSubscription, requireValidLicense, async (req, res) => {
   try {
     const { table_id, covers, staff_id, order_type } = req.body;
+    const openedAt = syncTs(req.body.opened_at); // SEPOS-SYNC-TIMESTAMP-001 (queue replay only; UI never sends it)
     // SEPOS-045 — counter orders (and any tableless mode) skip the table
     // status flip and don't enforce covers.
     const type = order_type === 'counter' || order_type === 'takeaway'
@@ -1640,9 +1738,9 @@ app.post('/api/orders', requireActiveSubscription, requireValidLicense, async (r
       for (let attempt = 0; ; attempt++) {
         try {
           result = await pool.query(
-            `INSERT INTO orders (table_id, staff_id, status, covers, order_type, opened_at)
-             VALUES ($1, $2, 'open', $3, $4, NOW()) RETURNING id`,
-            [insTable, insStaff, covers || 1, type]
+            `INSERT INTO orders (table_id, staff_id, status, covers, order_type, opened_at, created_at)
+             VALUES ($1, $2, 'open', $3, $4, COALESCE($5${SYNC_TS_CAST}, NOW()), COALESCE($5${SYNC_TS_CAST}, NOW())) RETURNING id`,
+            [insTable, insStaff, covers || 1, type, openedAt]
           );
           break;
         } catch (insErr) {
@@ -1785,7 +1883,9 @@ app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
 app.put('/api/orders/:id/fire-course/:course', async (req, res) => {
   try {
     const { id, course } = req.params;
-    const now = new Date().toISOString();
+    // SEPOS-SYNC-TIMESTAMP-001 — a queue replay carries the till's original
+    // fired_at; live fires (no body) stamp now, exactly as before.
+    const now = syncTs(req.body && req.body.fired_at) || new Date().toISOString();
     // SEPOS-032: capture ids about-to-be-fired before the UPDATE so we
     // can deplete stock for exactly that set.
     const aboutToFireRes = await pool.query(
@@ -2113,6 +2213,7 @@ app.put('/api/orders/:id/service-charge', async (req, res) => {
 // would break joins on the closed-orders endpoint).
 app.post('/api/orders/:id/close-zero', async (req, res) => {
   const orderId = req.params.id;
+  const closedAt = syncTs(req.body && req.body.closed_at); // SEPOS-SYNC-TIMESTAMP-001
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -2149,7 +2250,7 @@ app.post('/api/orders/:id/close-zero', async (req, res) => {
     }
 
     await client.query('INSERT INTO payments (order_id, amount, method) VALUES ($1, 0, $2)', [orderId, 'zero']);
-    await client.query(`UPDATE orders SET status='closed', closed_at=NOW(), total=0, service_charge=0, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
+    await client.query(`UPDATE orders SET status='closed', closed_at=COALESCE($2${SYNC_TS_CAST}, NOW()), total=0, service_charge=0, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId, closedAt]);
     await client.query('COMMIT');
     // SEPOS-AUDIT-001 — close the CLOUD copy too (no-op on cloud installs);
     // otherwise it stayed 'open' forever and the pull reopened the local row.
@@ -2168,6 +2269,7 @@ app.post('/api/orders/:id/close-zero', async (req, res) => {
 app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
   const { amount, method, tip } = req.body;
   const orderId = req.params.id;
+  const closedAt = syncTs(req.body.closed_at); // SEPOS-SYNC-TIMESTAMP-001 (queue replay only)
   const isCancel = String(method).toLowerCase() === 'cancelled' && Number(amount) === 0;
   // SEPOS-AUTO-SESSION-001 — belt-and-braces: a bill must never close outside
   // a shift window (covers orders created before this build shipped).
@@ -2241,7 +2343,7 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
         await client.query('ROLLBACK');
         return res.status(409).json({ error: `This bill is already ${order.status}.`, alreadyClosed: true });
       }
-      await client.query(`UPDATE orders SET status='cancelled', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
+      await client.query(`UPDATE orders SET status='cancelled', closed_at=COALESCE($2${SYNC_TS_CAST}, NOW()), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId, closedAt]);
       await client.query('COMMIT');
       await freeTableIfEmpty(order.table_id);   // round 5 — don't free a two-bill table
       // SEPOS-AUDIT-001 — this early-return path skipped the pay enqueue below,
@@ -2315,7 +2417,7 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
       closeServiceCharge = Number(serviceChargeForOrder({ ...order, service_charge: null }, scOn, scPct, discOverride).toFixed(2));
       if (String(method) === 'Complimentary') closeServiceCharge = 0; // SEPOS-COMP-001 — nothing is charged on a comped bill
     } catch { closeServiceCharge = 0; }
-    await client.query(`UPDATE orders SET status='closed', closed_at=NOW(), service_charge=$2, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId, closeServiceCharge]);
+    await client.query(`UPDATE orders SET status='closed', closed_at=COALESCE($3${SYNC_TS_CAST}, NOW()), service_charge=$2, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId, closeServiceCharge, closedAt]);
     await client.query('COMMIT');
 
     // ---- post-commit side effects (the order is now closed) ----
@@ -4064,6 +4166,98 @@ app.put('/api/orders/:id/bill-printed', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── SEPOS-CHECKBACK-001 (v1.9.60, Rumwong) — waiter check-back per course ──
+// Two taps per course on the Order screen: "Arrived" marks every fired kitchen
+// item of that course served (drives the existing Starters/Mains/Desserts Done
+// floor colours), then "Checked back" stamps checkback_<course>_at so the floor
+// map shows a ✓ on the table. Both mirror to the cloud through the queue so
+// satellites and the cloud agree.
+const CHECKBACK_COL = { 1: 'checkback_starters_at', 2: 'checkback_mains_at', 3: 'checkback_desserts_at' };
+
+app.put('/api/orders/:id/course/:course/arrived', async (req, res) => {
+  try {
+    const orderId = Number(req.params.id), course = Number(req.params.course);
+    if (!CHECKBACK_COL[course]) return res.status(400).json({ error: 'course must be 1, 2 or 3' });
+    const now = new Date().toISOString();
+    const items = await pool.query(
+      `SELECT order_items.id FROM order_items
+         LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
+         LEFT JOIN categories ON categories.id = COALESCE(menu_items.category_id, order_items.dest_category_id)
+        WHERE order_items.order_id = $1 AND order_items.course = $2 AND order_items.voided = 0
+          AND order_items.status <> 'served'
+          AND (categories.is_bar = 0 OR categories.is_bar IS NULL)`,
+      [orderId, course]);
+    for (const it of items.rows) {
+      // Venues that never press "Call" send everything at once — "Arrived" is
+      // still true for them, so an un-called item is marked called+served here
+      // (arrived implies cooked) rather than ignored.
+      await pool.query(`UPDATE order_items SET status='served', served_at=$1, is_fired=1, fired_at=COALESCE(fired_at, $1) WHERE id=$2`, [now, it.id]);
+      io.emit('item_status_changed', { item_id: it.id, status: 'served' });
+      await offlineQueue.enqueue('update_item_status', { localItemId: Number(it.id), status: 'served' });
+    }
+    io.emit('tableStatusChanged');
+    res.json({ success: true, served: items.rows.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/orders/:id/checkback/:course', async (req, res) => {
+  try {
+    const orderId = Number(req.params.id), course = Number(req.params.course);
+    const col = CHECKBACK_COL[course];
+    if (!col) return res.status(400).json({ error: 'course must be 1, 2 or 3' });
+    // Cloud replay passes the till's stamp so both sides show the same time.
+    const at = (req.body && req.body.at && !isNaN(new Date(req.body.at))) ? new Date(req.body.at).toISOString() : new Date().toISOString();
+    const clear = !!(req.body && req.body.clear);
+    await pool.query(`UPDATE orders SET ${col} = $1 WHERE id = $2`, [clear ? null : at, orderId]);
+    io.emit('order_checkback', { order_id: orderId, course, at: clear ? null : at });
+    io.emit('tableStatusChanged');
+    await offlineQueue.enqueue('update_order_checkback', { localOrderId: orderId, course, at: clear ? null : at, clear });
+    res.json({ success: true, course, at: clear ? null : at });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── SEPOS-CUSTOMER-ORDER-001 (v1.9.60) — attach a customer to any order ──────
+// Dine-in orders now carry customer_name/phone/email like takeaway orders do,
+// so the CRM (a derived view keyed by email-or-phone) counts their spend
+// exactly instead of guessing by table + date.
+app.put('/api/orders/:id/customer', async (req, res) => {
+  try {
+    const orderId = Number(req.params.id);
+    const b = req.body || {};
+    const clean = (v, n) => (v == null ? null : String(v).trim().slice(0, n) || null);
+    const customer_name  = clean(b.customer_name, 120);
+    const customer_phone = clean(b.customer_phone, 40);
+    const customer_email = clean(b.customer_email, 160);
+    await pool.query(`UPDATE orders SET customer_name=$1, customer_phone=$2, customer_email=$3 WHERE id=$4`,
+      [customer_name, customer_phone, customer_email, orderId]);
+    io.emit('order_customer_changed', { order_id: orderId, customer_name, customer_phone, customer_email });
+    await offlineQueue.enqueue('update_order_customer', { localOrderId: orderId, customer_name, customer_phone, customer_email });
+    res.json({ success: true, customer_name, customer_phone, customer_email });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Waiter-side customer lookup (any signed-in staff): names/phones/emails already
+// known from bookings and previous orders. Small, prefix/substring match.
+app.get('/api/customers/lookup', requireStaffAuth(), async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim().toLowerCase();
+    if (q.length < 2) return res.json([]);
+    const like = `%${q}%`;
+    const r = await pool.query(
+      `SELECT customer_name, customer_phone, customer_email, MAX(seen) AS last_seen FROM (
+         SELECT customer_name, customer_phone, customer_email, reservation_date AS seen FROM reservations
+          WHERE customer_name IS NOT NULL
+         UNION ALL
+         SELECT customer_name, customer_phone, customer_email, DATE(opened_at) AS seen FROM orders
+          WHERE customer_name IS NOT NULL AND (customer_phone IS NOT NULL OR customer_email IS NOT NULL)
+       ) c
+       WHERE LOWER(COALESCE(customer_name,'')) LIKE $1 OR LOWER(COALESCE(customer_phone,'')) LIKE $1 OR LOWER(COALESCE(customer_email,'')) LIKE $1
+       GROUP BY customer_name, customer_phone, customer_email
+       ORDER BY MAX(seen) DESC LIMIT 8`, [like]);
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/tables/status', async (req, res) => {
   try {
     const ordersRes = await pool.query(`SELECT orders.*, tables.table_number, tables.id as table_id FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`);
@@ -5158,6 +5352,42 @@ app.post('/api/local/archive-run', async (req, res) => {
     const force = !!req.body?.force;
     const r = await archiveService.archiveForDate(pool, date, { force });
     res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-ZCLOSE-GUARD-001 — has the day's End of Day already been saved?
+// Powers the manager-PIN warning before a sale / bill edit AFTER the close
+// (Yum Yum 3 Sep: a bill re-paid after the 21:53 Z made two Z prints of the
+// same day disagree). 'day' rows only count as closed; session closes are
+// reported (last_session_close_at) but do not lock. Trading day = the
+// tenant's zone (same rule the Z save uses via the client's local midnight).
+// Portable: candidates fetched + compared in JS so PG and SQLite agree.
+app.get('/api/z-report/day-status', async (req, res) => {
+  try {
+    const tz = await restaurantTz();
+    const wanted = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || ''))
+      ? String(req.query.date) : dateInZone(new Date(), tz);
+    const r = await pool.query(
+      `SELECT id, type, opened_at, closed_at, created_at FROM z_reports WHERE superseded_at IS NULL AND type IN ('day','session')`
+    );
+    const dayOf = (v) => { const d = new Date(v); return isNaN(d) ? String(v).slice(0, 10) : dateInZone(d, tz); };
+    let day = null, lastSession = null;
+    for (const row of r.rows) {
+      if (row.type === 'day') {
+        if (dayOf(row.opened_at) === wanted && (!day || new Date(row.created_at) > new Date(day.created_at))) day = row;
+      } else if (dayOf(row.closed_at || row.created_at) === wanted) {
+        const t = row.created_at || row.closed_at;
+        if (!lastSession || new Date(t) > new Date(lastSession)) lastSession = t;
+      }
+    }
+    res.json({
+      date: wanted,
+      closed: !!day,
+      closed_at: day ? (day.created_at || day.closed_at) : null,
+      type: day ? 'day' : (lastSession ? 'session' : null),
+      by: null,   // z_reports carries no staff column — reserved for a future audit field
+      last_session_close_at: lastSession,
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -8108,6 +8338,19 @@ app.get('/api/takeaway/availability', widgetCors, async (req, res) => {
   }
 });
 
+// SEPOS-ONLINE-TOGGLE-001 — owner switch to pause online (takeaway/delivery)
+// ordering: Admin → Settings → Online Ordering. Absent or '1' = on; '0' = paused.
+// Read fresh on every call (a minute-old value is fine, a stale cache is not —
+// the owner flips this mid-service). QR table ordering and bookings are NOT
+// gated by this — only the website order page / widget / online order creation.
+async function onlineOrderingEnabled() {
+  try {
+    const r = await pool.query(`SELECT value FROM settings WHERE key = 'online_ordering_enabled'`);
+    return String(r.rows[0]?.value ?? '1') !== '0';
+  } catch { return true; }
+}
+const ONLINE_PAUSED_MSG = 'Online ordering is paused';
+
 app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
   try {
     const r = await pool.query(`
@@ -8139,6 +8382,7 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
       delivery_radius_miles: deliveryEnabled ? Number(cfg.delivery_radius_miles) : 0,
       discount_percent: discountPercent,
       discount_min_total: discountMinTotal,
+      online_ordering_enabled: await onlineOrderingEnabled(),   // SEPOS-ONLINE-TOGGLE-001
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -8229,6 +8473,9 @@ app.get('/api/takeaway/delivery-check', widgetCors, async (req, res) => {
 
 // Submit a takeaway order from the public widget.
 app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireValidLicense, async (req, res) => {
+  // SEPOS-ONLINE-TOGGLE-001 — refuse BEFORE opening a session or touching the
+  // DB; a paused venue must not accumulate half-made orders or a phantom shift.
+  if (!await onlineOrderingEnabled()) return res.status(503).json({ error: ONLINE_PAUSED_MSG });
   await ensureOpenSession(resolveRestaurantId(req)); // SEPOS-AUTO-SESSION-001
   const client = await pool.connect();
   try {
@@ -8757,6 +9004,7 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
 });
 
 app.post('/api/takeaway/payment-intent', widgetCors, async (req, res) => {
+  if (!await onlineOrderingEnabled()) return res.status(503).json({ error: ONLINE_PAUSED_MSG }); // SEPOS-ONLINE-TOGGLE-001
   const sp = siampayCfg();
   if (!process.env.STRIPE_SECRET_KEY && !sp) {
     return res.status(503).json({ error: 'Stripe not configured on this restaurant. Please ask the restaurant to switch to demo mode.' });
@@ -9196,7 +9444,28 @@ app.get('/qr/t/:token', (req, res) => {
 // style (photos, option sheets, kitchen messages). Client websites link a
 // button here instead of embedding the legacy takeaway widget; talks to the
 // existing hardened /api/takeaway/* endpoints (server pricing, Stripe/mock).
-app.get('/order', (req, res) => {
+// SEPOS-ONLINE-TOGGLE-001 — when the owner has paused online ordering, the
+// hosted page shows a friendly notice (their name, colours, phone) instead of a
+// menu the customer can't order from. The page's own boot also checks the flag
+// (belt and braces for a cached copy); the API refuses regardless.
+async function onlinePausedPage() {
+  const r = await pool.query(`SELECT key, value FROM settings WHERE key IN ('company_name','restaurant_name','company_phone','restaurant_phone','brand_primary')`);
+  const cfg = {}; for (const row of r.rows) cfg[row.key] = row.value;
+  const name  = cfg.company_name || cfg.restaurant_name || 'Order online';
+  const phone = (cfg.company_phone || cfg.restaurant_phone || process.env.RESTAURANT_PHONE || '').trim();
+  const brand = /^#[0-9a-f]{6}$/i.test(cfg.brand_primary || '') ? cfg.brand_primary : '#1E4038';
+  const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const tel = phone ? `<p class="tel">Please call us on <a href="tel:${esc(phone.replace(/\s+/g, ''))}">${esc(phone)}</a></p>` : '';
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(name)} — online ordering paused</title>
+<style>body{margin:0;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f4ef;color:#1a1a2e;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{background:#fff;border-radius:16px;padding:32px 28px;max-width:440px;width:100%;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.08);border-top:6px solid ${brand}}
+h1{font-size:22px;margin:0 0 6px;color:${brand}} h2{font-size:18px;margin:14px 0 8px} p{margin:8px 0;line-height:1.5;color:#444} .tel a{color:${brand};font-weight:700;text-decoration:none;font-size:18px}</style></head>
+<body><div class="card"><h1>${esc(name)}</h1><div style="font-size:40px;line-height:1">⏸</div><h2>Online ordering is paused right now</h2><p>We're not taking online orders at the moment.</p>${tel}<p style="font-size:13px;color:#888;margin-top:16px">Please check back later — thank you for your patience.</p></div></body></html>`;
+}
+app.get('/order', async (req, res) => {
+  try {
+    if (!await onlineOrderingEnabled()) return res.status(200).type('html').send(await onlinePausedPage());
+  } catch { /* fall through to the normal page — never blank the customer */ }
   res.sendFile(path.join(__dirname, '..', 'public', 'order.html'));
 });
 
@@ -9208,7 +9477,10 @@ app.get('/book', (req, res) => {
 
 // SEPOS-ORDER-UNIFY-001 — the previous standalone /order UI, kept for
 // comparison and instant rollback while the widget-hosted page beds in.
-app.get('/order-legacy', (req, res) => {
+app.get('/order-legacy', async (req, res) => {
+  try {
+    if (!await onlineOrderingEnabled()) return res.status(200).type('html').send(await onlinePausedPage()); // SEPOS-ONLINE-TOGGLE-001
+  } catch { /* fall through */ }
   res.sendFile(path.join(__dirname, '..', 'public', 'order-legacy.html'));
 });
 
@@ -11110,7 +11382,11 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
         ON o.status = 'closed'
        AND (
              o.reservation_id = r.id
-          OR (o.reservation_id IS NULL AND o.table_id = r.table_id AND DATE(o.opened_at) = r.reservation_date)
+          OR (o.reservation_id IS NULL AND o.table_id = r.table_id AND DATE(o.opened_at) = r.reservation_date
+              -- SEPOS-CUSTOMER-ORDER-001: an order with its OWN customer contact is
+              -- counted exactly below, never by this table+date guess
+              AND (o.customer_phone IS NULL OR TRIM(o.customer_phone) = '')
+              AND (o.customer_email IS NULL OR TRIM(o.customer_email) = ''))
            )
       WHERE (r.customer_email IS NOT NULL AND TRIM(r.customer_email) <> '')
          OR (r.customer_phone IS NOT NULL AND TRIM(r.customer_phone) <> '')
@@ -11133,9 +11409,13 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
         COUNT(*) AS total_visits,
         MIN(DATE(opened_at)) AS first_visit,
         MAX(DATE(opened_at)) AS last_visit,
-        COALESCE(SUM(total), 0) AS total_spend
+        COALESCE(SUM(CASE WHEN status = 'closed' THEN total ELSE 0 END), 0) AS total_spend
       FROM orders
-      WHERE order_type = 'takeaway'
+      -- SEPOS-CUSTOMER-ORDER-002 (Baan Rao, 17 Sep): a guest attached to an OPEN
+      -- table shows in Customers straight away (visit counted); spend still
+      -- counts CLOSED bills only. Cancelled/voided orders never count.
+      WHERE status IN ('open', 'closed')
+        -- SEPOS-CUSTOMER-ORDER-001: takeaway AND dine-in orders with a contact
         AND ((customer_email IS NOT NULL AND TRIM(customer_email) <> '')
           OR (customer_phone IS NOT NULL AND TRIM(customer_phone) <> ''))
       GROUP BY COALESCE(NULLIF(LOWER(TRIM(customer_email)), ''), 'p:' || NULLIF(TRIM(customer_phone), ''))

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, getArchiveStatus, openArchiveFolder, runArchive, getMigrationStatus, getStorageStats, getTunnelStatus, getKitchenTemplates, createKitchenTemplate, updateKitchenTemplate, deleteKitchenTemplate, assertOk, SERVER_URL } from '../../api';
+import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, getArchiveStatus, openArchiveFolder, runArchive, getMigrationStatus, getStorageStats, getTunnelStatus, getKitchenTemplates, createKitchenTemplate, updateKitchenTemplate, deleteKitchenTemplate, assertOk, SERVER_URL, getRemoteDevices, setupRemoteSupport } from '../../api';
 import { applyBrandTheme, BRAND_PRESETS, DEFAULT_PRIMARY, DEFAULT_ACCENT } from '../../theme'; // SEPOS-BRAND-001
 import DiningDurationSettings from './DiningDurationSettings';
 import { confirm } from '../../utils/confirm';
@@ -749,6 +749,20 @@ export default function SettingsSection() {
   // build passed and the Settings page died at runtime with 'confirmDeviceAuth is not
   // defined'. Caught by loading the page, not by compiling it.
   const [confirmDeviceAuth, setConfirmDeviceAuth] = useState(false);
+  // SEPOS-REMOTE-002 — remote-support tills (RustDesk id/password reported by each till)
+  const [remoteDevices, setRemoteDevices] = useState(null);
+  const [remoteSetupBusy, setRemoteSetupBusy] = useState(false);
+  const [remoteSetupMsg, setRemoteSetupMsg] = useState('');
+  const runRemoteSetup = async () => {
+    setRemoteSetupBusy(true); setRemoteSetupMsg('Windows will ask for permission on this till — click Yes. This takes about a minute…');
+    try {
+      const r = await setupRemoteSupport();
+      if (r && r.success) { setRemoteSetupMsg(`✓ Remote support is set up — ID ${r.rustdesk_id}.`); getRemoteDevices().then(d => setRemoteDevices(Array.isArray(d) ? d : [])).catch(() => {}); }
+      else setRemoteSetupMsg((r && r.error) || 'Setup did not complete.');
+    } catch (e) { setRemoteSetupMsg(e.message || 'Setup did not complete.'); }
+    finally { setRemoteSetupBusy(false); }
+  };
+  useEffect(() => { getRemoteDevices().then(d => setRemoteDevices(Array.isArray(d) ? d : [])).catch(() => setRemoteDevices([])); }, []);
   const [settings, setSettings] = useState({
     company_name:            '',
     company_address:         '',
@@ -1606,6 +1620,58 @@ export default function SettingsSection() {
       </div>
 
       {/* Print text size moved to Admin → Printers (SEPOS-PRINT-FONT-001) — it's a printer setting. */}
+
+      {/* ── Online ordering ON/OFF (SEPOS-ONLINE-TOGGLE-001, Akin Thai ask) ──
+          Absent/'1' = on. '0' pauses the website order page + widget and the
+          server refuses new online orders. Bookings + QR table ordering untouched. */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🥡 Online Ordering</h2>
+        <label style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer', fontSize:14 }}>
+          <input type="checkbox" checked={settings.online_ordering_enabled !== '0'} onChange={e => setSettings({...settings, online_ordering_enabled:e.target.checked?'1':'0'})} />
+          <span>Online ordering is <b>{settings.online_ordering_enabled !== '0' ? 'ON' : 'OFF'}</b></span>
+        </label>
+        <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>
+          When off, your website's order page and widget show "Online ordering is paused" and no new online orders are accepted — for example while you're short-staffed, on holiday, or the kitchen is at capacity. Bookings are unaffected. Switch it back on here any time; it takes effect within a minute.
+        </div>
+        {settings.online_ordering_enabled === '0' && (
+          <div style={{ marginTop:10, padding:'8px 12px', borderRadius:8, background:'#fff7ed', border:'1px solid #fed7aa', color:'#9a3412', fontSize:13, fontWeight:600 }}>
+            ⏸ Online ordering is currently paused — customers can't place orders from your website.
+          </div>
+        )}
+      </div>
+
+      {/* ── Remote support (SEPOS-REMOTE-002) ── each Windows till sets up
+          RustDesk on our own server at launch and reports its ID + password to
+          this restaurant's cloud; SiamEPOS support connects with these. */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:8 }}>🛟 Remote support</h2>
+        <div style={{ fontSize:12, color:'#888', marginBottom:12 }}>
+          SiamEPOS support can connect to your till to help, using the details below (you'll see a notice on the till while a session is active). Share these only with SiamEPOS.
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12, flexWrap:'wrap' }}>
+          <button type="button" onClick={runRemoteSetup} disabled={remoteSetupBusy}
+            style={{ padding:'9px 14px', borderRadius:10, border:'none', background:'var(--brand-primary, #0D1B3E)', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:700, opacity: remoteSetupBusy ? .6 : 1 }}>
+            {remoteSetupBusy ? 'Setting up…' : '🛟 Set up remote support on this till'}
+          </button>
+          <span style={{ fontSize:12, color:'#888' }}>Runs automatically on a Windows till's first start after updating; use this if the permission prompt was missed or declined.</span>
+        </div>
+        {remoteSetupMsg && <div style={{ fontSize:13, color: remoteSetupMsg.startsWith('✓') ? '#166534' : '#9a3412', marginBottom:10 }}>{remoteSetupMsg}</div>}
+        {remoteDevices === null ? <div style={{ fontSize:13, color:'#aaa' }}>Loading…</div>
+        : remoteDevices.filter(d => d.rustdesk_id).length === 0 ? (
+          <div style={{ fontSize:13, color:'#aaa' }}>No till has reported remote-support details yet — they appear after a Windows till restarts on v1.9.61 or later, or after the button above.</div>
+        ) : remoteDevices.filter(d => d.rustdesk_id).map(d => (
+          <div key={d.device_id} style={{ display:'flex', alignItems:'center', gap:14, padding:'10px 12px', border:'1px solid #eee', borderRadius:10, marginBottom:8, flexWrap:'wrap' }}>
+            <div style={{ flex:1, minWidth:180 }}>
+              <div style={{ fontWeight:700, fontSize:14 }}>{d.platform === 'win32' ? 'Windows till' : d.platform === 'darwin' ? 'Mac till' : 'Till'} · v{d.app_version || '?'}</div>
+              <div style={{ fontSize:11, color:'#999' }}>last seen {d.last_seen ? new Date(d.last_seen).toLocaleString('en-GB') : '—'}</div>
+            </div>
+            <div style={{ fontFamily:'ui-monospace, Menlo, monospace', fontSize:14 }}>ID <b>{d.rustdesk_id}</b></div>
+            <div style={{ fontFamily:'ui-monospace, Menlo, monospace', fontSize:14 }}>PW <b>{d.rustdesk_password || '—'}</b></div>
+            <button type="button" onClick={() => { try { navigator.clipboard.writeText(`RustDesk ID ${d.rustdesk_id} · password ${d.rustdesk_password || ''}`); } catch {} }}
+              style={{ padding:'6px 12px', borderRadius:8, border:'1px solid #ddd', background:'#f8f8f8', cursor:'pointer', fontSize:12, fontWeight:700 }}>Copy</button>
+          </div>
+        ))}
+      </div>
 
       {/* ── Delivery (SEPOS-DELIVERY-002) ── */}
       <div style={cardStyle}>

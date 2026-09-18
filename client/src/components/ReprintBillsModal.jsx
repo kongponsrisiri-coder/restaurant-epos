@@ -5,7 +5,8 @@
 // top bar opens TODAY's closed bills (newest first, dine-in + takeaway); one
 // tap prints through the exact pipeline Admin → Bills uses.
 import { useEffect, useState } from 'react';
-import { getBills, getBillItems, getSettings } from '../api';
+import { getBills, getBillItems, getSettings, getOrderDepositApplied } from '../api';
+import { billMoney } from '../screens/admin/BillsSection';
 import { printReceipt } from '../screens/ReceiptPrinter';
 import { dineTableLabel } from '../utils/orderLabel';
 
@@ -31,22 +32,29 @@ export default function ReprintBillsModal({ onClose }) {
     try {
       const items = await getBillItems(bill.id);
       if (!Array.isArray(items) || !items.length) { alert('Could not load this bill’s items — try Admin → Bills.'); return; }
-      const subtotal      = Number(bill.total || 0);
-      const paid          = Number(bill.paid_amount || bill.total || 0);
-      const serviceCharge = Math.max(0, paid - subtotal);
-      const discountAmount = bill.discount_value > 0
-        ? (bill.discount_type === 'percent' ? subtotal * (bill.discount_value / 100) : Number(bill.discount_value))
-        : 0;
+      // SEPOS-REPRINT-DEPOSIT-001 follow-up (Rumwong T4, 16 Sep): this modal had
+      // its own copy of the OLD maths — service = paid − subtotal, TOTAL = paid —
+      // so a deposit bill printed "TOTAL £31.65 / Card" with no service line and
+      // no deposit. It now uses the SAME billMoney() + applied-deposit lookup as
+      // Admin → Bills, so both doors print the same paper as the original.
+      const { subtotal, discount: discountAmount, service: serviceCharge, billTotal, paid, overpaid } = billMoney(bill);
+      const tip = Math.max(0, overpaid);
+      let depositPaid = (Array.isArray(bill.tenders) ? bill.tenders : [])
+        .filter(t => t.method === 'Deposit').reduce((s, t) => s + Number(t.amount || 0), 0);
+      try {
+        const d = await getOrderDepositApplied(bill.id);
+        depositPaid += Math.min(Number(d?.applied || 0), billTotal);
+      } catch { /* no applied deposit (or offline) — print without the lines */ }
       printReceipt({
         order: bill, items, settings,
         paymentDetails: {
           subtotal, discountAmount, serviceCharge,
-          billTotal: paid, amountPaid: paid, change: 0,
-          method: bill.method || '', tip: 0,
+          billTotal, amountPaid: paid, change: 0,
+          method: bill.method || '', tip, depositPaid,
           tenders: Array.isArray(bill.tenders) ? bill.tenders : [],
         },
       });
-      setToast(`🖨 Printing ${dineTableLabel(bill)} — £${paid.toFixed(2)}`);
+      setToast(`🖨 Printing ${dineTableLabel(bill)} — £${billTotal.toFixed(2)}`);
       setTimeout(() => setToast(''), 2500);
     } catch (e) {
       alert(`Could not re-print: ${e?.message || 'please try again'}`);

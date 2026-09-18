@@ -418,7 +418,15 @@ async function resolvePriceId(plan) {
 router.get('/billing/mrr', async (req, res) => {
   try {
     const s = stripe();
-    const d = await s.subscriptions.list({ status: 'all', limit: 100, expand: ['data.customer', 'data.items.data.price.product'] });
+    // Stripe allows 4 expand levels — price.product would be a 5th (the
+    // Control Room hit the same wall). Names come from a separate prices
+    // lookup, exactly as pull_stripe() does via /billing/plans.
+    const d = await s.subscriptions.list({ status: 'all', limit: 100, expand: ['data.customer', 'data.items.data.price'] });
+    const priceNames = new Map();
+    try {
+      const pl = await s.prices.list({ limit: 100, expand: ['data.product'] });
+      for (const p of pl.data) priceNames.set(p.id, (p.product && p.product.name) || p.nickname || p.lookup_key || p.id);
+    } catch (e) { console.warn('[ops-clients] billing/mrr: price names unavailable:', e.message); }
     const cards = (await pool.query('SELECT id, restaurant_name, email, stripe_subscription_id, stripe_customer_id, monthly_fee, status FROM clients')).rows;
     const byId = new Map(cards.filter(c => c.stripe_subscription_id).map(c => [c.stripe_subscription_id, c]));
     const byCust = new Map(cards.filter(c => c.stripe_customer_id).map(c => [c.stripe_customer_id, c]));
@@ -436,7 +444,7 @@ router.get('/billing/mrr', async (req, res) => {
       return {
         subscription_id: su.id, status: su.status, cancel_at_end: !!su.cancel_at_period_end,
         customer: cust.name || cust.email || cust.id || '—', email: cust.email || null,
-        product: (price.product && price.product.name) || price.nickname || price.lookup_key || price.id,
+        product: priceNames.get(price.id) || price.nickname || price.lookup_key || price.id,
         amount: amt, interval: rec.interval || null, monthly: Math.round(monthly * 100) / 100,
         next_payment: cpe ? new Date(cpe * 1000).toISOString().slice(0, 10) : null,
         client_id: card ? card.id : null, client_name: card ? card.restaurant_name : null,

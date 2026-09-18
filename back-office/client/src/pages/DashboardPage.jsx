@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
-import { C, card, btn, input, label, fmtRelTime, fmtMoney, PLAN_LABEL, STATUS_STYLE, productBadge } from '../theme.js';
+import { C, card, btn, input, label, fmtRelTime, fmtMoney, PLAN_LABEL, planLabel, STATUS_STYLE, productBadge } from '../theme.js';
 import StatusPill from '../components/StatusPill.jsx';
 import HealthDot from '../components/HealthDot.jsx';
 
@@ -179,7 +179,7 @@ function ClientCard({ client, onClick }) {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 12 }}>
-        <Metric label="Plan" value={PLAN_LABEL[client.plan] || client.plan || '—'} />
+        <Metric label="Plan" value={planLabel(client)} />
         <Metric label="MRR" value={client.monthly_fee ? fmtMoney(client.monthly_fee) : '—'} />
         <Metric label="Orders today" value={client.last_orders_today ?? '—'} accent={client.last_orders_today > 0 ? C.success : null} />
       </div>

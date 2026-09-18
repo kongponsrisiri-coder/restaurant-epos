@@ -505,11 +505,23 @@ router.post('/:id/billing/link-subscription', adminOnly, async (req, res) => {
        WHERE id = $1 RETURNING id, restaurant_name`,
       [id, customerId, found.id, nextBilling]
     );
-    res.json({ linked: true, client: upd.rows[0], subscription_id: found.id, customer_id: customerId });
+    const billing = await syncClientBilling(id);   // BO-BILLING-002 — write the price onto the card
+    res.json({ linked: true, client: upd.rows[0], subscription_id: found.id, customer_id: customerId, billing });
   } catch (err) {
     console.error('[ops-clients] link-subscription error', err.message);
     res.status(500).json({ error: err.message || 'Could not link subscription' });
   }
+});
+
+// BO-BILLING-002 — re-read plan / monthly fee / next billing from Stripe.
+// One client (card button) or every subscribed client (dashboard). Safe to
+// call any time; it only writes what Stripe says.
+router.post('/:id/billing/sync', adminOnly, async (req, res) => {
+  const r = await syncClientBilling(parseInt(req.params.id, 10));
+  res.status(r.synced ? 200 : 409).json(r);
+});
+router.post('/billing/sync-all', adminOnly, async (req, res) => {
+  res.json(await syncAllStale({ all: true }));
 });
 
 // ── SEPOS-029 — onboarding wizard endpoints ────────────────────────

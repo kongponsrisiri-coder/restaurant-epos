@@ -10352,6 +10352,39 @@ app.post('/api/vouchers/:id/void', requireStaffAuthOrSyncSecret(), async (req, r
 // the EPOS till the same way Cash/Card on a normal order is. The voucher
 // row records payment_method='cash' or 'card' so the Z-Report shows
 // it as on-till revenue (not the off-till Stripe block).
+// SEPOS-LOYALTY-001 (option A, Korakot 18 Sep 2026) — a loyalty REWARD as a
+// redeemable voucher. Called only by the SiamEPOS Loyalty service (separate
+// app) with the tenant's sync secret. Cloud-side only: a local till answers
+// 404 so it can never mint vouchers offline (the service then falls back to a
+// LOY- code). Not a sale: payment_method='mock' + type='loyalty' keep it out
+// of voucher-sales, Z and deposit reports (all already filter on those).
+app.post('/api/loyalty/reward', async (req, res) => {
+  if (process.env.DB_MODE === 'local') return res.status(404).json({ error: 'cloud only' });
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected || provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+  try {
+    const { value, label, expires_at, recipient_name, recipient_email, reference } = req.body || {};
+    const amt = Number(value);
+    if (!(amt > 0) || amt > 500) return res.status(400).json({ error: 'value must be £0.01–£500' });
+    let code;
+    for (let i = 0; i < 5; i++) {
+      code = voucherSvc.generateCode('LOY-');
+      const dup = await pool.query('SELECT id FROM vouchers WHERE code = $1', [code]);
+      if (!dup.rows.length) break;
+    }
+    const expires = expires_at && /^\d{4}-\d{2}-\d{2}$/.test(String(expires_at)) ? expires_at : voucherSvc.defaultExpiryDate();
+    const r = await pool.query(
+      `INSERT INTO vouchers (code, original_amount, balance, recipient_name, recipient_email, sender_name, message, expires_at, payment_method, status, type, restaurant_id)
+       VALUES ($1, $2, $2, $3, $4, 'Loyalty reward', $5, $6, 'mock', 'active', 'loyalty', $7) RETURNING id, code, expires_at, balance`,
+      [code, amt, recipient_name || null, recipient_email || null, String(label || 'Loyalty reward').slice(0, 120) + (reference ? ` [${String(reference).slice(0, 40)}]` : ''), expires, resolveRestaurantId(req)]);
+    res.json({ id: r.rows[0].id, code: r.rows[0].code, expires_at: r.rows[0].expires_at, balance: Number(r.rows[0].balance) });
+  } catch (err) {
+    console.error('[loyalty] reward voucher failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/vouchers/sell', requireStaffAuthOrSyncSecret(), async (req, res) => {
   // SEPOS-AUDIT-001 — sell on the CLOUD from local installs: the voucher then
   // exists where redemptions/lookups are served, the gift email's Add-to-Wallet

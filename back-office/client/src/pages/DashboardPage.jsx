@@ -33,11 +33,15 @@ export default function DashboardPage() {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  // BO-BILLING-002 — MRR comes from Stripe (the truth), like the Control Room;
+  // the card sum is only the fallback when Stripe can't be read.
+  const [stripeMrr, setStripeMrr] = useState(null);
   const load = async () => {
     setLoading(true);
     try { setClients(await api.listClients()); }
     catch { setClients([]); }
     finally { setLoading(false); }
+    try { setStripeMrr(await api.getStripeMrr()); } catch { setStripeMrr(null); }
   };
   useEffect(() => { load(); }, []);
   useEffect(() => { const t = setInterval(load, 30000); return () => clearInterval(t); }, []);
@@ -91,7 +95,12 @@ export default function DashboardPage() {
 
       {/* Stat tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 28 }}>
-        <StatTile label="Active subs"  value={activeSubs}         sub={`${fmtMoney(totalMRR)} MRR`}    accent={C.success} />
+        <StatTile label="Active subs"
+          value={stripeMrr && stripeMrr.mrr != null ? stripeMrr.active_count : activeSubs}
+          sub={stripeMrr && stripeMrr.mrr != null
+            ? `${fmtMoney(stripeMrr.mrr)} MRR · from Stripe${stripeMrr.unlinked_count ? ` · ${stripeMrr.unlinked_count} not on a card` : ''}`
+            : `${fmtMoney(totalMRR)} MRR · from cards (Stripe unavailable)`}
+          accent={C.success} />
         <StatTile label="On trial"     value={counts.trial  || 0}                                      accent={C.info} />
         <StatTile label="In setup"     value={counts.setup  || 0}                                      accent={C.warning} />
         <StatTile label="Online now"   value={onlineCount}        sub={`/ ${clients.length} total`}    accent={C.gold} />

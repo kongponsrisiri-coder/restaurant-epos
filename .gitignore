@@ -38,3 +38,8 @@ client/android/node-host/
 Claude Chat history/
 *.chat-export.json
 scripts/menu-snapshot-*.json
+
+# iOS host leftovers — never commit (GitHub 100 MB limit; host build is deferred)
+SiamEPOS.xcarchive/
+client/ios/App/NodeMobile.xcframework/
+client/ios/node-host/

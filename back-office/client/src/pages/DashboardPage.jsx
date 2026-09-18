@@ -78,6 +78,9 @@ export default function DashboardPage() {
           </p>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
+          {/* BO-BILLING-002 — re-read every card from its live Stripe subscription. */}
+          <button onClick={async () => { try { const r = await api.syncAllBilling(); await load(); window.alert(`Synced ${r.synced}/${r.checked} cards from Stripe`); } catch (e) { window.alert(e.message); } }}
+            style={{ ...btn.ghost, fontSize: 13 }} title="Re-read plan, fee and next billing for every card from Stripe">↻ Sync from Stripe</button>
           {/* BO-FOUNDER-001 — copy the invite-only Founder's Pack self-pay kiosk link. */}
           <button
             onClick={copyFounderLink}

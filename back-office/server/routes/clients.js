@@ -562,6 +562,27 @@ router.post('/:id/billing/sync', adminOnly, async (req, res) => {
   const r = await syncClientBilling(parseInt(req.params.id, 10));
   res.status(r.synced ? 200 : 409).json(r);
 });
+// BO-BILLING-002c — attach a card to a specific live Stripe subscription
+// (for customers whose Stripe email differs from the card — Akin, Baan Rao,
+// Yum Yum). Refuses canceled subs and subs already on another card.
+router.post('/:id/billing/attach', adminOnly, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const subscriptionId = String((req.body || {}).subscription_id || '').trim();
+    if (!/^sub_/.test(subscriptionId)) return res.status(400).json({ error: 'subscription_id (sub_…) required' });
+    const other = await pool.query('SELECT id, restaurant_name FROM clients WHERE stripe_subscription_id = $1 AND id <> $2', [subscriptionId, id]);
+    if (other.rows.length) return res.status(409).json({ error: `That subscription is already on ${other.rows[0].restaurant_name}` });
+    const sub = await stripe().subscriptions.retrieve(subscriptionId);
+    if (!['active', 'trialing', 'past_due'].includes(sub.status)) return res.status(409).json({ error: `Subscription is ${sub.status}, not live` });
+    const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer && sub.customer.id;
+    await pool.query('UPDATE clients SET stripe_subscription_id = $2, stripe_customer_id = $3 WHERE id = $1', [id, subscriptionId, customerId || null]);
+    const r = await syncClientBilling(id);
+    res.status(r.synced ? 200 : 409).json(r);
+  } catch (err) {
+    console.error('[ops-clients] billing/attach error', err.message);
+    res.status(500).json({ error: err.message || 'Could not attach subscription' });
+  }
+});
 router.post('/billing/sync-all', adminOnly, async (req, res) => {
   res.json(await syncAllStale({ all: true }));
 });

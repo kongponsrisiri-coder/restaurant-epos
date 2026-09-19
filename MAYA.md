@@ -194,6 +194,29 @@ Do NOT stop to ask permission, and do NOT stop early — the deliverable is the 
 
 **Canonical folder:** `~/Documents/SiamEPOS-Docs/client-sites/<client-slug>/`
 
+**☁️ DEPLOY TARGET — CLOUDFLARE PAGES ONLY (STANDING RULE, Korakot 2026-09-19).**
+Every demo / prospect mockup site goes to **Cloudflare Pages and nowhere else**. Not Netlify, not
+both — Netlify bandwidth is what drains the credit, and a mockup has no custom domain, so the
+apex-SSL problem that parked the wider Cloudflare migration cannot apply here. (That parked
+decision still stands for **client sites on real domains** — those remain on Netlify.)
+
+```bash
+set -a; source ~/Documents/SiamEPOS-Docs/.infra-keys; set +a   # CLOUDFLARE_API_TOKEN + _ACCOUNT_ID
+# 1. create the project — over the REST API, NOT the CLI
+curl -s -X POST -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"<slug>-sandy","production_branch":"main"}' \
+  "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects"
+# 2. deploy
+cd ~/Documents/SiamEPOS-Docs/client-sites/<client>
+npx wrangler@4 pages deploy site --project-name=<slug>-sandy --branch main --commit-dirty=true
+```
+- ⚠️ `wrangler pages project create` **fails silently** — it exits printing only a log path and
+  creates nothing. Always create the project over the REST API first.
+- CF Pages has native pretty URLs (`/x.html` 308s to `/x`), honours `_headers`, and keeps the
+  `X-Robots-Tag: noindex` guard every mockup ships with.
+- Live URL is `https://<slug>-sandy.pages.dev` — that is the link that goes in `notes.md`,
+  TEAM-STATUS and any message to Korakot.
+
 **Step 5 command** (don't skip it — Korakot has had to ask twice):
 ```bash
 cd ~/Documents/SiamEPOS-Docs/client-sites/<client>
@@ -209,8 +232,9 @@ node ../_tools/md2pdf.js seo-analysis.md /tmp/x.html "<Client Name>" "#<brand-he
 - **Adapt the CLIENT's real brand — don't impose a house style.** Before rebuilding, study their live site's actual design DNA (palette, fonts, layout motifs, signature sections) and elevate THAT. **Phakoon lesson (2026-08-07):** I first shipped a cool editorial-serif look; Korakot: *"I don't really like the design — learn their design and adapt it."* Re-themed to their own identity — green+coral colour-blocking, Poppins body + Oswald condensed + Sacramento script, their green hero callout + script "Welcome" band + dine/takeaway coral cards. Cinematic ≠ generic-premium; it must feel like *them*. Quick way to learn it: screenshot their live site (headless Chrome, big `--virtual-time-budget` for Wix/Squarespace) + `grep font-family` the archived HTML.
 - **Use the client's REAL photos — as many as are good — and build a hero VIDEO.** Don't ship 6 shots when 22 are usable; build a gallery. No client video? Make one from **their own stills** (Ken Burns + crossfade — recipe in `client-sites/nua/make-hero-video.sh`). **Never stock footage** for a client's food/premises.
 - Fix EVERY defect found on their live site, and keep the list — that list IS the pitch.
+- **Check the photo resolution BEFORE designing the hero.** `pdfimages -list <their-menu.pdf>` — the photographs inside a client's menu PDF are routinely only ~500px even when the page renders at 300dpi (Rumwong's brand-new menu: two 533×800 shots, everything else was badge artwork). Design to the native size — a 533px portrait belongs in a **column**, not stretched full-bleed at 4× — then enhance deterministically (de-block → stepped LANCZOS with unsharp per hop → micro-contrast). **Never a generative upscale on a client's food:** it repaints the dish and the page stops showing what they actually serve. Then ask Korakot to get the photographer's originals — if they just reprinted a menu, those exist.
 - Never invent a price. Rewrite corrupted copy, but prices come from their real data or not at all.
-- Mobile pass at 390px. Verify in a **390px iframe**, not a headless `--window-size` (that lies about the layout viewport and shows phantom overflow).
+- Mobile pass at 390px — and **measure, don't eyeball a screenshot**. A headless `--window-size=390` shot is NOT a phone: with no device emulation the meta viewport is ignored, so a perfectly good page comes back looking cut off at the right edge. Drive Chrome over CDP with `Emulation.setDeviceMetricsOverride {width:390,height:900,deviceScaleFactor:2,mobile:true}` before navigating, then compare `document.documentElement.scrollWidth` to `window.innerWidth`. Equal = fine. (A horizontally-scrolling chip rail legitimately reports children past the viewport — check the ancestor has `overflow-x:auto` before calling it a bug.)
 - One booking CTA in the nav. Don't ship "Book" *and* "Reserve" — same page, split click.
 - Footer credit: `Website mockup by SiamEPOS™`.
 - ⚠️ The booking widget is a **singleton** — two `<script>` embeds on one page and the second renders NOTHING, silently. One widget per page; use a branch picker for multi-site clients.

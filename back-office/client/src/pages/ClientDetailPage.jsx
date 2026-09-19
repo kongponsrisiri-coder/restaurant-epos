@@ -49,6 +49,30 @@ export default function ClientDetailPage() {
   // BO-BILLING-001 — live plans from Stripe so new products appear automatically.
   useEffect(() => { api.getBillingPlans().then(r => setBillingPlans(r?.plans || [])).catch(() => {}); }, []);
 
+  // BO-BILLING-002c — attach this card to a live Stripe subscription that isn't on any card.
+  const [stripeSubs, setStripeSubs] = useState([]);
+  const [attachId, setAttachId] = useState('');
+  useEffect(() => { api.getStripeMrr().then(r => setStripeSubs((r?.subscriptions || []).filter(x => ['active', 'trialing', 'past_due'].includes(x.status) && (!x.client_id || x.client_id === Number(id))))).catch(() => setStripeSubs([])); }, [id]);
+  const attach = async () => {
+    if (!attachId) return;
+    try {
+      const r = await api.attachSubscription(id, attachId);
+      if (r?.synced) { await load(); window.alert(`Attached: ${PLAN_LABEL[r.plan] || r.plan} — £${r.monthly_fee}/mo ✓`); }
+      else window.alert(r?.reason || r?.error || 'Could not attach');
+    } catch (e) { window.alert(e.message); }
+  };
+  // BO-BILLING-002 — pull plan + fee from Stripe onto the card (fixes "—" MRR).
+  const [syncing, setSyncing] = useState(false);
+  const syncBilling = async () => {
+    setSyncing(true);
+    try {
+      const r = await api.syncBilling(id);
+      if (r?.synced) { await load(); window.alert(`Synced from Stripe: ${PLAN_LABEL[r.plan] || r.plan} — £${r.monthly_fee}/mo ✓`); }
+      else window.alert(r?.reason || r?.error || 'Nothing to sync (no Stripe subscription linked).');
+    } catch (e) { window.alert(e.message); }
+    finally { setSyncing(false); }
+  };
+
   if (!data) return <div style={{ color: C.textMuted }}>Loading…</div>;
   const { client, health, notes, tills = [] } = data;
   const latest = health[0];
@@ -110,30 +134,6 @@ export default function ClientDetailPage() {
   };
 
   // Link a subscription created outside ops (matched by client email in Stripe).
-  // BO-BILLING-002c — attach this card to a live Stripe subscription that isn't on any card.
-  const [stripeSubs, setStripeSubs] = useState([]);
-  const [attachId, setAttachId] = useState('');
-  useEffect(() => { api.getStripeMrr().then(r => setStripeSubs((r?.subscriptions || []).filter(x => ['active', 'trialing', 'past_due'].includes(x.status) && (!x.client_id || x.client_id === Number(id))))).catch(() => setStripeSubs([])); }, [id]);
-  const attach = async () => {
-    if (!attachId) return;
-    try {
-      const r = await api.attachSubscription(id, attachId);
-      if (r?.synced) { await load(); window.alert(`Attached: ${PLAN_LABEL[r.plan] || r.plan} — £${r.monthly_fee}/mo ✓`); }
-      else window.alert(r?.reason || r?.error || 'Could not attach');
-    } catch (e) { window.alert(e.message); }
-  };
-  // BO-BILLING-002 — pull plan + fee from Stripe onto the card (fixes "—" MRR).
-  const [syncing, setSyncing] = useState(false);
-  const syncBilling = async () => {
-    setSyncing(true);
-    try {
-      const r = await api.syncBilling(id);
-      if (r?.synced) { await load(); window.alert(`Synced from Stripe: ${PLAN_LABEL[r.plan] || r.plan} — £${r.monthly_fee}/mo ✓`); }
-      else window.alert(r?.reason || r?.error || 'Nothing to sync (no Stripe subscription linked).');
-    } catch (e) { window.alert(e.message); }
-    finally { setSyncing(false); }
-  };
-
   const linkSub = async () => {
     setLinkingSub(true);
     try {

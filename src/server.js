@@ -11626,6 +11626,121 @@ async function depleteStockForItems(itemIds, source = 'sale') {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// SEPOS-046l — cloud-side stock RECONCILER (Korakot, 19 Sep 2026).
+// Depletion used to be event-driven (fire-course / bar add) and missed
+// every other path: till replays arriving already-fired, Arrived, resend,
+// and it had no idempotency. This job makes stock movements match the
+// ORDER STATE instead:
+//   • fired/served, not voided, has a recipe, no `order_item:<id>` sale
+//     movement yet → deplete (once)
+//   • voided, has a sale movement, void type returns stock (policy) and no
+//     `order_item:<id>` return movement yet → write the reversing movement
+// Cloud only (a local till never runs it — the cloud is authoritative for
+// stock). Runs every RECONCILE_MS and on demand (POST /api/stock/reconcile).
+// Policy: settings.stock_void_returns = comma list of void types that put
+// stock back; default everything except Wastage.
+// ─────────────────────────────────────────────────────────────────────
+const STOCK_RECONCILE_MS = parseInt(process.env.STOCK_RECONCILE_MS || String(5 * 60 * 1000), 10);
+let _reconcileBusy = false;
+
+async function reconcileStock({ sinceDays = 30, dryRun = false } = {}) {
+  if (process.env.DB_MODE === 'local') return { skipped: 'local mode' };
+  if (_reconcileBusy) return { skipped: 'busy' };
+  _reconcileBusy = true;
+  const out = { depleted_items: 0, depleted_movements: 0, returned_items: 0, returned_movements: 0, no_recipe: 0, dry_run: dryRun };
+  try {
+    const settings = await loadSettings().catch(() => ({}));
+    const returns = String(settings.stock_void_returns ?? 'Wrong Order,Customer Changed Mind,Comp').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+
+    // 1. Fired/served, not voided, recipe exists, no sale movement yet.
+    const due = await pool.query(`
+      SELECT oi.id, oi.quantity
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      WHERE oi.voided = 0
+        -- sold = fired/served, OR on a bill that was paid (a paid bill's items went out)
+        AND (oi.is_fired = 1 OR oi.status IN ('cooking','ready','served') OR o.status = 'closed')
+        AND o.status <> 'cancelled'
+        AND o.opened_at >= NOW() - ($1 || ' days')::interval
+        AND EXISTS (SELECT 1 FROM recipes r WHERE r.menu_item_id = oi.menu_item_id)
+        AND NOT EXISTS (SELECT 1 FROM stock_movements sm WHERE sm.reference = 'order_item:' || oi.id AND sm.movement_type = 'sale')
+      ORDER BY oi.id
+      LIMIT 2000`, [String(sinceDays)]);
+    if (!dryRun && due.rows.length) {
+      for (const row of due.rows) {
+        const before = await pool.query(`SELECT COUNT(*)::int AS n FROM stock_movements WHERE reference = $1`, [`order_item:${row.id}`]);
+        await depleteStockForItems([row.id], 'sale');
+        const after = await pool.query(`SELECT COUNT(*)::int AS n FROM stock_movements WHERE reference = $1`, [`order_item:${row.id}`]);
+        out.depleted_movements += Math.max(0, after.rows[0].n - before.rows[0].n);
+      }
+    }
+    out.depleted_items = due.rows.length;
+
+    // 2. Voided with a sale movement and a returning void type → reverse once.
+    const voided = await pool.query(`
+      SELECT oi.id, oi.void_type
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      WHERE oi.voided = 1
+        AND o.opened_at >= NOW() - ($1 || ' days')::interval
+        AND EXISTS (SELECT 1 FROM stock_movements sm WHERE sm.reference = 'order_item:' || oi.id AND sm.movement_type = 'sale')
+        AND NOT EXISTS (SELECT 1 FROM stock_movements sm WHERE sm.reference = 'order_item:' || oi.id AND sm.movement_type = 'void_return')
+      ORDER BY oi.id LIMIT 2000`, [String(sinceDays)]);
+    for (const row of voided.rows) {
+      if (!returns.includes(String(row.void_type || '').toLowerCase())) continue;   // Wastage stays depleted
+      out.returned_items++;
+      if (dryRun) continue;
+      const sales = await pool.query(`SELECT ingredient_id, quantity, cost_at_time FROM stock_movements WHERE reference = $1 AND movement_type = 'sale'`, [`order_item:${row.id}`]);
+      for (const m of sales.rows) {
+        const qty = Math.abs(Number(m.quantity || 0));
+        if (qty <= 0) continue;
+        await pool.query(`INSERT INTO stock_movements (ingredient_id, movement_type, quantity, cost_at_time, reference, note) VALUES ($1, 'void_return', $2, $3, $4, $5)`,
+          [m.ingredient_id, qty, Number(m.cost_at_time || 0), `order_item:${row.id}`, `void: ${row.void_type || ''}`]);
+        await pool.query(`UPDATE ingredients SET current_stock = current_stock + $1 WHERE id = $2`, [qty, m.ingredient_id]);
+        out.returned_movements++;
+      }
+    }
+
+    // 3. Visibility: fired items with no recipe (not counted) in the window.
+    const nr = await pool.query(`
+      SELECT COUNT(DISTINCT oi.menu_item_id)::int AS n FROM order_items oi JOIN orders o ON o.id = oi.order_id
+      WHERE oi.voided = 0 AND (oi.is_fired = 1 OR oi.status IN ('cooking','ready','served') OR o.status = 'closed') AND o.opened_at >= NOW() - ($1 || ' days')::interval
+        AND oi.menu_item_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM recipes r WHERE r.menu_item_id = oi.menu_item_id)`, [String(sinceDays)]);
+    out.no_recipe = nr.rows[0].n;
+    if (out.depleted_items || out.returned_items) console.log(`[stock] reconcile: ${out.depleted_items} items depleted (${out.depleted_movements} movements), ${out.returned_items} voids returned (${out.returned_movements})${dryRun ? ' [dry run]' : ''}`);
+    return out;
+  } catch (err) {
+    console.error('[stock] reconcile failed:', err.message);
+    return { error: err.message };
+  } finally { _reconcileBusy = false; }
+}
+
+// On demand (admin) — ?dry=1 reports without writing; ?days=N window.
+app.post('/api/stock/reconcile', requireStaffAuthOrSyncSecret(['admin', 'manager']), async (req, res) => {
+  const dryRun = String(req.query.dry || (req.body && req.body.dry) || '') === '1';
+  const days = Math.min(365, Math.max(1, parseInt(req.query.days || (req.body && req.body.days) || '30', 10) || 30));
+  res.json(await reconcileStock({ sinceDays: days, dryRun }));
+});
+// Stock health for the owner: dishes sold without a recipe (not counted).
+app.get('/api/stock/health', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
+  try {
+    const days = Math.min(365, Math.max(1, parseInt(req.query.days || '30', 10) || 30));
+    const r = await pool.query(`
+      SELECT oi.menu_item_id, COALESCE(mi.name, oi.item_name) AS name, SUM(oi.quantity)::int AS sold
+      FROM order_items oi JOIN orders o ON o.id = oi.order_id LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+      WHERE oi.voided = 0 AND (oi.is_fired = 1 OR oi.status IN ('cooking','ready','served') OR o.status = 'closed') AND o.opened_at >= NOW() - ($1 || ' days')::interval
+        AND oi.menu_item_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM recipes rc WHERE rc.menu_item_id = oi.menu_item_id)
+      GROUP BY oi.menu_item_id, COALESCE(mi.name, oi.item_name) ORDER BY sold DESC LIMIT 100`, [String(days)]);
+    const last = await pool.query(`SELECT MAX(created_at) AS at FROM stock_movements WHERE movement_type IN ('sale','void_return')`);
+    res.json({ days, no_recipe: r.rows, last_movement_at: last.rows[0].at, reconcile_every_ms: STOCK_RECONCILE_MS });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+if (process.env.DB_MODE !== 'local' && process.env.STOCK_RECONCILE_DISABLED !== '1') {
+  setTimeout(() => reconcileStock().catch(() => {}), 45000);
+  setInterval(() => reconcileStock().catch(() => {}), STOCK_RECONCILE_MS);
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // SEPOS-031 — wastage cost report
 // Voided order_items × recipes.cost_per_portion. Groups by void_type
 // so reports separate true Wastage from Wrong Order / Comp / etc.

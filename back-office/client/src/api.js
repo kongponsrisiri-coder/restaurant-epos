@@ -182,6 +182,16 @@ export const api = {
   siampayConfig: () =>
     fetch(`${API}/api/siampay/config`, { headers: tokenHeader() }).then(handle),
 
+  // SEPOS-LOYALTY-001 — 🎁 Loyalty card
+  loyaltyConfig: () => fetch(`${API}/api/loyalty/config`, { headers: tokenHeader() }).then(handle),
+  loyaltyStatus: (id) => fetch(`${API}/api/loyalty/clients/${id}/status`, { headers: tokenHeader() }).then(handle),
+  loyaltyEnable: (id, status) => fetch(`${API}/api/loyalty/clients/${id}/enable`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...tokenHeader() }, body: JSON.stringify({ status }) }).then(handle),
+  loyaltyUpdate: (id, body) => fetch(`${API}/api/loyalty/clients/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...tokenHeader() }, body: JSON.stringify(body) }).then(handle),
+  loyaltySync: (id) => fetch(`${API}/api/loyalty/clients/${id}/sync`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...tokenHeader() } }).then(handle),
+  loyaltyOwnerLink: (id) => fetch(`${API}/api/loyalty/clients/${id}/owner-link`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...tokenHeader() } }).then(handle),
+  loyaltyMembers: (id, q) => fetch(`${API}/api/loyalty/clients/${id}/members?q=${encodeURIComponent(q || '')}`, { headers: tokenHeader() }).then(handle),
+  loyaltyAdjust: (id, mid, body) => fetch(`${API}/api/loyalty/clients/${id}/members/${mid}/adjust`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...tokenHeader() }, body: JSON.stringify(body) }).then(handle),
+
   siampayStatus: (id) =>
     fetch(`${API}/api/siampay/clients/${id}/status`, { headers: tokenHeader() }).then(handle),
   // SEPOS-REVIEWS-001

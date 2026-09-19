@@ -370,6 +370,7 @@ export default function ClientDetailPage() {
           </SectionCard>
 
           <SiamPayCard client={client} />
+          <LoyaltyCard client={client} isAdmin={isAdmin} />
           <ReviewsCard client={client} />
 
           {isAdmin && (
@@ -770,6 +771,103 @@ function SiamPayCard({ client }) {
         </div>
       )}
       {error && <div style={{ fontSize: 12, color: C.danger || '#991b1b', marginTop: 10 }}>{error}</div>}
+    </SectionCard>
+  );
+}
+
+// SEPOS-LOYALTY-001 — 🎁 Loyalty: one switch, one number set, support tools.
+// Rules belong to the owner (their page); ops only turns it on, watches, and
+// fixes a member's card when asked.
+function LoyaltyCard({ client, isAdmin }) {
+  const [cfg, setCfg] = useState(null);
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  const [link, setLink] = useState('');
+  const [copied, setCopied] = useState('');
+  const [q, setQ] = useState('');
+  const [members, setMembers] = useState(null);
+  const money = (v) => '£' + Number(v || 0).toFixed(2).replace(/\.00$/, '');
+
+  const refresh = () => {
+    api.loyaltyConfig().then(setCfg).catch(() => setCfg({ configured: false }));
+    api.loyaltyStatus(client.id).then(setSt).catch(e => setError(e.message || 'status failed'));
+  };
+  useEffect(() => { refresh(); }, [client.id]);
+
+  const run = async (tag, fn) => { setBusy(tag); setError(''); try { await fn(); } catch (e) { setError(e.message || `${tag} failed`); } setBusy(''); };
+  const enable = () => run('enable', async () => { await api.loyaltyEnable(client.id, 'pilot'); refresh(); });
+  const setStatus = (status) => run('status', async () => { await api.loyaltyUpdate(client.id, { status }); refresh(); });
+  const sync = () => run('sync', async () => { const r = await api.loyaltySync(client.id); refresh(); window.alert(r.ok ? `Synced: ${r.earned} earned, ${r.rewards} rewards issued` : `Sync failed: ${r.error}`); });
+  const ownerLink = () => run('link', async () => { const r = await api.loyaltyOwnerLink(client.id); setLink(r.url); });
+  const search = () => run('members', async () => { const r = await api.loyaltyMembers(client.id, q); setMembers(r.members || []); });
+  const stamp = (m) => run('adjust', async () => {
+    const note = window.prompt(st.mode === 'stamps' ? `Add one stamp for ${m.name || m.phone} — reason?` : `Points for ${m.name || m.phone}: "50 apology"`);
+    if (note == null) return;
+    const pts = st.mode === 'points' ? parseInt(note, 10) || 0 : 0;
+    await api.loyaltyAdjust(client.id, m.id, st.mode === 'stamps' ? { visits: 1, note } : { points: pts, note });
+    await search();
+  });
+  const copy = (text, tag) => navigator.clipboard.writeText(text).then(() => { setCopied(tag); setTimeout(() => setCopied(''), 1500); });
+  const chip = (text, on) => <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20, background: on ? '#dcfce7' : '#f1f5f9', color: on ? '#166534' : '#475569' }}>{text}</span>;
+
+  if (cfg && !cfg.configured) {
+    return <SectionCard title="🎁 Loyalty"><div style={{ fontSize: 13, color: C.textFaint }}>Not configured on ops — set <code>LOYALTY_API_URL</code> + <code>LOYALTY_OPS_KEY</code> on the Back Office Railway (values in <code>scripts/.secrets-loyalty-service.txt</code>).</div></SectionCard>;
+  }
+  if (!st) return <SectionCard title="🎁 Loyalty"><div style={{ fontSize: 13, color: C.textFaint }}>{error || 'Loading…'}</div></SectionCard>;
+
+  if (!st.enabled) {
+    return (
+      <SectionCard title="🎁 Loyalty">
+        <div style={{ fontSize: 13, color: C.textFaint, marginBottom: 10 }}>
+          Stamps or points for this restaurant's guests, run <strong>beside the till</strong>: earns from their cloud's closed bills (guest tagged with 👤 or ordered online), rewards arrive as vouchers the till already redeems. Nothing changes on the till. Uses this client's cloud URL and sync secret from Setup.
+        </div>
+        {isAdmin && <button onClick={enable} disabled={busy === 'enable'} style={{ ...btn.gold, fontSize: 13, opacity: busy === 'enable' ? 0.6 : 1 }}>{busy === 'enable' ? 'Enabling…' : '🎁 Enable loyalty (pilot)'}</button>}
+        {error && <div style={{ color: '#b42318', fontSize: 12, marginTop: 8 }}>{error}</div>}
+      </SectionCard>
+    );
+  }
+
+  const s = st.stats || {};
+  return (
+    <SectionCard title="🎁 Loyalty">
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+        {chip(st.status.toUpperCase(), st.status === 'on')}
+        {chip(st.mode === 'stamps' ? `Stamps · visit ≥ ${money(st.min_spend)}` : `Points · ${st.points_per_pound}/£`, true)}
+        <span style={{ fontSize: 12, color: C.textMuted }}>{(st.ladder || []).map(l => `${l.at} → ${l.reward}`).join(' · ')}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8, marginBottom: 10 }}>
+        {[['Members', s.members], ['Joined this month', s.members_this_month], ['Visits this month', s.earns_this_month], ['Member spend', money(s.spend_this_month)], ['Rewards issued', s.rewards_issued], ['Redeemed', s.rewards_redeemed], ['Reward cost', money(s.reward_cost)]].map(([l, v]) => (
+          <div key={l} style={{ background: C.bg, borderRadius: 8, padding: '8px 10px' }}><div style={{ fontSize: 18, fontWeight: 800, color: C.navy }}>{v ?? '–'}</div><div style={{ fontSize: 11, color: C.textMuted }}>{l}</div></div>
+        ))}
+      </div>
+      <div style={{ fontSize: 12, color: st.feed_last_error ? '#b42318' : C.textMuted, marginBottom: 10 }}>
+        {st.feed_last_error ? `Feed error: ${st.feed_last_error}` : st.feed_last_ok ? `Last earn run ${new Date(st.feed_last_ok).toLocaleString('en-GB')}` : 'No earn run yet'}
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+        <button onClick={() => copy(st.customer_url, 'cust')} style={{ ...btn.ghost, fontSize: 13 }}>{copied === 'cust' ? 'Copied ✓' : '🔗 Copy customer join link'}</button>
+        {isAdmin && <button onClick={ownerLink} disabled={busy === 'link'} style={{ ...btn.ghost, fontSize: 13 }}>{busy === 'link' ? '…' : '👤 Owner page link'}</button>}
+        {link && <button onClick={() => copy(link, 'own')} style={{ ...btn.gold, fontSize: 13 }}>{copied === 'own' ? 'Copied ✓' : 'Copy owner link (7 days)'}</button>}
+        {isAdmin && <button onClick={sync} disabled={busy === 'sync'} style={{ ...btn.ghost, fontSize: 13 }}>{busy === 'sync' ? 'Syncing…' : '↻ Earn now'}</button>}
+        {isAdmin && st.status !== 'on' && <button onClick={() => setStatus('on')} style={{ ...btn.ghost, fontSize: 13 }}>Set ON</button>}
+        {isAdmin && st.status !== 'off' && <button onClick={() => { if (window.confirm('Switch loyalty OFF for this client? Earning stops; data is kept.')) setStatus('off'); }} style={{ ...btn.ghost, fontSize: 13, color: '#b42318' }}>Switch off</button>}
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && search()} placeholder="Find a member — phone, name or email" style={{ ...input, fontSize: 13, flex: 1 }} />
+        <button onClick={search} style={{ ...btn.ghost, fontSize: 13 }}>Search</button>
+      </div>
+      {members && (
+        <div style={{ marginTop: 8, fontSize: 13 }}>
+          {members.length === 0 && <div style={{ color: C.textFaint }}>No members match.</div>}
+          {members.slice(0, 20).map(m => (
+            <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderTop: `1px solid ${C.border}` }}>
+              <div><b>{m.name || '—'}</b> <span style={{ color: C.textMuted }}>{m.phone || m.email}</span><div style={{ fontSize: 12, color: C.textMuted }}>{st.mode === 'stamps' ? `${m.visits} stamps (card ${m.cycle})` : `${m.points} pts`} · {money(m.lifetime_spend)} lifetime · last {m.last_visit_at ? new Date(m.last_visit_at).toLocaleDateString('en-GB') : '—'}</div></div>
+              {isAdmin && <button onClick={() => stamp(m)} style={{ ...btn.ghost, fontSize: 12 }}>{st.mode === 'stamps' ? '+1 stamp' : '+ points'}</button>}
+            </div>
+          ))}
+        </div>
+      )}
+      {error && <div style={{ color: '#b42318', fontSize: 12, marginTop: 8 }}>{error}</div>}
     </SectionCard>
   );
 }

@@ -558,6 +558,22 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 🌙 KRIT SESSION WRAP — Sun 20 Sep 2026 (Korakot: "ok done for today, board it")
+**Shipped / live today (all verified on the live surface):**
+- **Loyalty (SEPOS-LOYALTY-001) — first real earn.** Korakot's Mac till switched to Baan Siam (trap: the reset gesture relaunches with the OLD `CLOUD_API_URL` env and `main.js` lets env beat config.json → wizard "saved" Baan Siam but the till stayed on Rumwong; fixed by quit + clean relaunch; logged as SEPOS-WIZARD-ENV-001 for a future till release). Bill #378 £30.45 with 👤 → stamp 1/10; card link by email; **Android wallet button** (same .pkpass, snapshot note); **owner app Members → Send link** (`POST /owner/members/:id/send-link`). 9 Korakot contact variants merged on Baan Siam (Korakot ran the script).
+- **Satellite APK v1.5.56 (vc122)** — "Get the latest version" link on the setup screen; `/app` live; prerelease `tablet-v1.5.56`.
+- **Baan Rao** — 25 Sunday Buffet dishes at £0 with meat choice (mains 10–17, Pad Thai, Pad Pak Rom), Tom Yum/Tom Kha chicken-or-mushroom.
+- **Release feed repaired** — Sam's `spa-v1.3.0` had been published FULL → `/releases/latest` = spa; flipped to prerelease (Korakot: "flip it"); desktop feed = v1.9.67 again.
+- **Netlify credit drain stopped** — `siamspa` + `siamepos-spa` were auto-building on every spa push (77 deploys tonight); `stop_builds=true` on both (Korakot ran the CLI). Sam: deploy deliberately with SPA-DEPLOY-ALL-001; confirm `siamspa` is dead and delete it.
+**NOT done / carried over:**
+- ⏳ `server.js` customer picker groups by raw phone/email (07… vs +44… = separate rows) + Customers→Delete never anonymises dine-in 👤 bills (entry pops back). Fix written? **No** — waits for Korakot's go; cloud batch after 23:00 on a quiet day.
+- ⏳ SEPOS-VOUCHER-YEAR-001 (Mint's read-only findings above) — not started.
+- ⏳ Baan Rao till: 7 quarantined sync-queue entries from 18 Sep 19:50 — look at with Korakot present.
+- ⏳ Loyalty: Google Wallet issuer account (Korakot's action) → live-updating Android card; Twilio creds → SMS links; custom domain rewards.siamepos.co.uk.
+- ⏳ iOS satellite: the 1.5.56 link line on the next TestFlight build (1.0(3) uploaded 18 Sep; expires ~17 Dec).
+- v1.9.68 stays HELD (prerelease) until needed. Spa Mac build = Sam's (SPA-MAC-SIGN-001 building at wrap; fallback `runs-on: macos-14` like ours).
+— Krit, 23:05
+
 ### 🔴 FOR KRIT — SEPOS-VOUCHER-YEAR-001: the spa's "mistyped expiry year kills voucher lookup" bug EXISTS in the restaurant repo — CONFIRMED by read-only check (Mint relaying Sam, Sun 20 Sep ~18:3x; Korakot asked Sam to tell Krit directly)
 Sam's SPA-VOUCHER-YEAR-001 (row below, spa commit `eda1ed3`): a 5–6-digit year in a DATE column → node-pg returns a JS Date → `toISOString()` gives the EXPANDED form `+202666-09-30` → `.slice(0,10)` = `"+202666-09"` → split on `-` has no day → `Date.UTC(NaN…)` / `RangeError` → **every lookup of that voucher 500s, customer at the till can't pay.** Highbury lost a sale this afternoon.
 **Where it is here (Mint read the code, changed nothing):**

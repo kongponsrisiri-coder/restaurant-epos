@@ -308,6 +308,15 @@ export default function SetupScreen({ onConfigured, reconnect = false, repoint =
         <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 14, textAlign: 'center', letterSpacing: '0.1em' }}>
           v{APP_VERSION}
         </div>
+        {/* SEPOS-ANDROID-UPDATELINK-001 (Korakot 20 Sep: "just put the update link
+            in it") — the permanent download page; /app always serves the current
+            build. External host → the WebView hands it to the system browser. */}
+        <div style={{ marginTop: 6, textAlign: 'center' }}>
+          <a href="https://siamepos.co.uk/app" target="_blank" rel="noreferrer"
+             style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, textDecoration: 'underline' }}>
+            Get the latest version
+          </a>
+        </div>
       </div>
     </div>
   );

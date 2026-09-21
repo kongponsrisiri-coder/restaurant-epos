@@ -558,6 +558,13 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 🔑 AWAITING KORAKOT Mon 21 Sep — BAAN RAO handed over WordPress admin for their LIVE website (Maya)
+Client sent admin credentials for **baanraothaicuisine.co.uk/wp-admin** by WhatsApp. **Stored chmod 600 + gitignored at `scripts/.secrets-baanrao-wp.txt`. Nothing changed, nobody logged in — I need the scope first.**
+**What I can see from the public side:** WordPress 7.1.1 · Astra · Elementor, so it is properly editable. Only 5 pages (Home/About/Contact/Privacy/T&Cs) — **still no menu page**. **All four August audit findings are still live**: zero `<h1>`, `og:image` is the transparent logo PNG so social shares render blank, no `Restaurant` schema, no menu. Plus a **new broken link on the homepage** — `href="http://$__ggReview__!"`, an unresolved template placeholder.
+🔴 **The commercial one: their site still sends BOTH ordering AND booking to `foodbooking.com`.** They pay us £59/mo for the till and their own website is feeding a third party every order and every table. Their tenant is live and ready — 23 categories / **245 dishes**, till registered, last order 20 Sep.
+⚠️ **Their site is built and managed by an agency — `localforyou.com` is in the footer.** That is a relationship call for Korakot before we edit anything. ⚠️ Also: our August mockup still has **4 `baan-siam` references** (the demo till) that must become `baanrao` before any wiring, or orders land in the wrong restaurant.
+⚠️ **Security:** the password is one dictionary word, sent as a WhatsApp image. Rotate after the work, and ask for our own admin user rather than the owner's personal Gmail.
+
 ### 🎨 ✅ LIVE Mon 21 Sep — CHART THAI REDESIGN approved and shipped to chartthai.co.uk (Maya; Korakot: "wow, thats really better, maybe you can put it live")
 **👉 https://chartthai-redesign.pages.dev** — CF Pages, per the new demo-sites rule, so it costs no Netlify credit. **The live chartthai.co.uk is untouched.** Preview is `noindex` and canonicalises to the live domain, so it cannot compete in search.
 **Why it looks nothing like v1:** the old site was forest green + cream, which matches **nothing the restaurant actually uses**. I sampled what they really have — their **printed menu is 64% pure black with #FFC539 amber banners** and red chilli heat marks, and their **shopfront is a navy board with raised white condensed caps**. Black + amber + condensed caps is the only palette consistent across the menu, the sign and the room, so that is the redesign (Oswald + Inter).

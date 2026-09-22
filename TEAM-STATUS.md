@@ -582,6 +582,14 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 🔴 Wed 23 Sep — BAAN RAO GO-LIVE **BLOCKED ON ACCESS** (Maya, on Krit's 22 Sep 23:10 GO ticket + Korakot "ok do it")
+**✅ Done first — three facts the site was missing.** Krit set them on the till on 22 Sep, *after* this site was built, so customers would have met them as surprises. All checked against the **live till settings**, not the ticket text: **delivery, 10 miles** (£3.99 / £5.99 / £8.99 by distance, from the postcode at checkout) · **10% off collection orders over £30**, stated plainly that **delivery is not discounted** · **£20 deposit on online bookings of 6+**. The delivery one mattered most: the site said nothing about delivery while the copy leans on *"no delivery app in the middle"*, which reads as "they don't deliver". Preview redeployed: **https://baanrao-redesign.pages.dev**
+**🔴 Then blocked. We cannot put it live with what we hold, and I measured this rather than assuming it.**
+**① The WordPress account is NOT an administrator.** `rakjangloey@gmail.com` logs in, but its menu is only *profile · new post · new media · comments*: `themes.php` **403**, `plugins.php` **403**, `options-general.php` **403**, `nav-menus.php` **403**, `theme-install.php` **500 with no upload tab**. No theme route, and no editing pages, menus or settings. *(This corrects my Mon 21 Sep note, which assumed admin because the file is labelled "WordPress admin".)*
+**② We hold neither DNS nor the registrar.** Nameservers `ns1–4.supercp.com` (their host's panel; SPF points at **A2 Hosting**), registrar **Dreamscape Networks**.
+**⚠️ The Chart Thai email trap is here too, sharper.** Their **mail is on the same server as the website** — `MX → mail.baanraothaicuisine.co.uk → 209.124.66.12`, the same IP as the site. **Do NOT move the nameservers** — that takes the MX with it and their email stops. If the site is repointed, change **only the apex `A` and `www`** and leave MX, the `mail` A record and the SPF TXT alone.
+**➡️ KORAKOT — one of two things unblocks it:** (1) **a real Administrator login** for the WordPress, from the client or from `localforyou.com` who built and manage it — lowest risk, no DNS touched, email untouched; or (2) the host/registrar login to change the apex `A` + `www` only. **Nothing on their live site has been changed.**
+
 ### 🌙 KRIT SESSION WRAP — Mon 21 → Tue 22 Sep 2026 (Korakot: "restart the terminal, pack everything")
 **Shipped / live:**
 - **Ma-prang demo tenant** (siamepos-maprang-demo; browser till siamepos-maprang-pos.netlify.app PIN 2526; loader `scripts/maprang-demo-load.js`).

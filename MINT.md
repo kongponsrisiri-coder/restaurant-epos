@@ -5,7 +5,7 @@
 
 ## 📌 RESUME A PRIOR CHAT
 Korakot may say "read the transcript and continue." Full saved chat + resume brief:
-`~/Documents/SiamEPOS-Docs/social/MINT-CHAT-TRANSCRIPT-2026-08-07.md` (brief at top, then full verbatim transcript). Short brief + PDF: `MINT-RESUME-BRIEF-2026-08-07.{md,pdf}`. Read the brief first, then continue.
+**Latest: `~/Documents/SiamEPOS-Docs/social/MINT-RESUME-BRIEF-2026-09-22.{md,pdf}`** (session 5→22 Sep: engine switch, client packs, Thann Thai live, rules #10–12, client-page content rules). Older: `MINT-RESUME-BRIEF-2026-08-07.{md,pdf}` + transcript `MINT-CHAT-TRANSCRIPT-2026-08-07.md`. Read the latest brief first, then continue.
 
 ## ⚠️ START OF EVERY SESSION — DO THIS FIRST
 1. Read `TEAM-STATUS.md` — see what the whole team is working on
@@ -63,6 +63,8 @@ SiamEPOS is an **ERP for Thai *businesses* in the UK — NOT just restaurants.**
 
 **🇬🇧 THAI SETTINGS MUST LOOK UK, NOT A PALACE (Korakot, repeated 2026-08-04):** our audience is Thai businesses **in the UK** — so restaurant/spa/shop scenes must look like a **real, modest UK high-street venue** (plain wooden tables, simple pendant/spot lighting, understated modern decor, maybe a £-priced menu poster). gpt-image-2 defaults to an ornate luxury Thailand *palace/resort* (gold mandalas, crystal chandeliers, heavy carved panels, brass everywhere) — **explicitly prompt AGAINST that** ("real everyday UK Thai restaurant, NOT a luxury palace, no gold mandalas/chandeliers"). Reference: `marketing/cards/till-ai-uk.png`.
 
+**⚠️ AI "ENHANCE" REWRITES SMALL TEXT (caught 2026-09-22 on Korakot's tills photo: the till screen came back reading "SiamEROS Ltd" with a garbled keypad).** Any photo containing a SCREEN, sign, label, menu board or printed text → do NOT run through `make-graphic.py enhance`; use a plain Pillow exposure/contrast/unsharp pass instead (see `social/siamepos/2026-09/wk4/` founder post), or composite the untouched original text region back over the AI output. Always zoom into text areas before using an enhanced photo.
+
 **📷 IF KORAKOT SENDS A REAL PHOTO, USE IT (Korakot, 2026-08-04):** when he provides a real photo (his actual restaurant/setting/scene), **render FROM his photo** — don't invent a fake AI scene instead. Feed his photo to gpt-image-2 edits to enhance/relight/composite (e.g. place a UI on the device in his shot), or use it directly in the brand frame. His real photo is the preferred source; only generate a scene when he hasn't given one.
 
 ---
@@ -73,9 +75,16 @@ SiamEPOS is an **ERP for Thai *businesses* in the UK — NOT just restaurants.**
 |---|---|---|---|
 | **SiamEPOS (own page)** | ✅ pipe LIVE, test post published | FB (IG not linked yet) | brand: navy #0D1B3E / gold #C9A84C; site siamepos.co.uk |
 | **Jinta Thai Massage** | 🔜 pilot — they ASKED for this | FB + IG (pending page-admin access) | photos + brand already in `~/Documents/SiamEPOS-Docs/client-sites/jinta-massage/`; site jinta-massage.netlify.app |
+| **Thann Thai Restaurant** (Weybridge) | 🟢 pipe LIVE 2026-09-22 (keys in `.infra-keys`, token verified) — 6 posts pending on the board (Sep–Oct); owner never-list + service OK still pending | FB only (509 followers, IG not linked); page id `101757121213197`; quiet since 1 Jan 2026 | kit `social/thann-thai/BRAND.md`; 20 photos in `client-sites/thann-thai/photos/`; live menu `thannthai.siamepos.co.uk/api/menu`; slug **`thann-thai`** |
 | *(next client)* | pipeline — Korakot will name | | |
 
 ---
+
+## 🍽 CLIENT-PAGE CONTENT RULES (Korakot, 2026-09-22 — on the first Thann Thai batch: "not only the food menu, no need to mention the price")
+1. **No prices on client posts** unless the owner asks for them. The page sells the *experience*; the menu sells the dishes.
+2. **Not a menu board.** Rotate themes across the month: 🌧 weather/season (dark evenings, first frost, heatwave) · 🎃 occasion/festival (Halloween, clocks change, Bonfire Night, Christmas parties, Songkran, Loy Krathong, Mother's Day) · 🌿 **one "benefit of Thai food / ingredients" post per month** (lemongrass, galangal, chilli, turmeric, holy basil — traditional wisdom + widely-known facts, never medical claims) · 📖 story (heritage, handmade, the chefs) · 🕠 rhythm (lunch, late nights, Sunday).
+3. **Link every post to the restaurant** — the season/occasion is the hook, the table is the answer, the CTA is call/Messenger.
+4. Verify every date (clocks change, festivals, half-term) against a calendar before writing it.
 
 ## 🤝 CLIENT ONBOARDING — adding a new social client's Facebook Page
 **Full runbook: `~/Documents/SiamEPOS-Docs/manuals/SiamEPOS-Social-Client-Onboarding-Runbook.md` (+ .pdf).** The short version:
@@ -177,6 +186,7 @@ Korakot approves posts visually in **Control Room → Social tab → 📋 Approv
 - **Any scheduling change must keep the board honest.** A post that has gone out must LEAVE the Timetable; a board that shows done work as pending is worse than a late post, because the next click double-posts.
 - 👁 **Reviewing the PHOTO of a scheduled post** (Korakot asked 21 Aug): the Timetable's *"scheduled natively in Meta Planner"* rows are caption-only, so use one of — **(a)** the Approval board *before* approving (thumbnail is shown there; that is the natural review moment), **(b)** **Meta Business Suite → Planner** (business.facebook.com/latest/planner — shows the real post and lets him edit/cancel), or **(c)** **double-click `~/Desktop/Preview Scheduled Posts.command`** (or `python3 "$HOME/Library/Application Support/SiamEPOS Control Room/preview-scheduled.py"` — ⚠️ `$HOME`, NOT `~`, because the shell does not expand a tilde inside quotes) → builds + opens `scheduled-preview.html`, a contact sheet of the **real image + caption + time pulled live from Meta**, and flags in red any post missing its image.
 - Verify with `GET /{page-id}/scheduled_posts`.
+- ⚠️ **Meta only accepts `scheduled_publish_time` within ~30 days** (`(#100) The specified scheduled publish time is invalid`). Monthly batches beyond that stay `approved` + `schedule_at` on the board and hand over automatically once inside the window — expected, not a failure. **Changing the IMAGE of an already-handed-over post = cancel on Meta (`DELETE /{native_scheduled_id}`), clear `native_scheduled_id`, restore `schedule_at`, let the job re-hand it** (done 22 Sep for Thann Thai).
 
 ## ⛔ WHAT WE CANNOT AUTOMATE — FACEBOOK GROUPS (verified 2026-08-13)
 **Never promise a client that we can auto-post or auto-share to Facebook Groups.** Meta deprecated the Groups API in Graph v19.0 and removed it from **all versions on 22 April 2024** — `publish_to_groups` and `groups_access_member_info` no longer exist. Verified on our own token: **no group scopes granted**, `me/groups` returns 0, `me/managed_groups` is not a field. There is no permission left to apply for; this is not an app-review problem.
@@ -210,6 +220,8 @@ Korakot approves posts visually in **Control Room → Social tab → 📋 Approv
 7. **Reel / video ads are PORTRAIT — 1080×1920 (9:16), vertical only** (Reels / TikTok / Stories / feed). Never landscape or square for a reel. Reel factory (`reel-factory/make-reel.py`) already outputs this — keep it.
 8. **EVERY post caption ends with HASHTAGS** (Korakot 2026-07-23) — relevant to the post's topic AND our product. ~5–8 tags, mix Thai + English + brand + topic (never 20+ spam). On their own line after the — กต / CTA. Always include **#SiamEPOS** + ≥1 audience tag + topic tags. Pull from the bank below; verify each fits the specific post.
 11. **⚠️ THAI HEADLINES IN GRADIENT GOLD — PLACE THE SUPPLIED IMAGE, never retype the Thai.** Gold-gradient text (`background-clip:text`) paints only the LINE BOX; Thai tone marks sit above it, so at a tight `line-height` they render **completely invisible** — ร้านไม่ล่ม came out as "รานไมลม" (Maya caught it pre-send, 2026-09-14). Solid-colour lines are unaffected, which is why only the gold half breaks and it is easy to miss. If you must set it in CSS: `line-height:≥1.25` **and** `padding-top:.28em`. Then **render it and read the Thai back before enqueuing** — every time, any Thai over a gradient, filter or mask.
+11. **NEVER quote a WEBSITE price in a post** (Korakot denied `wk3-kn-saved-replies`, 2026-09-19: *"Dont mention the price as i do for someone at £200, but £5 just for maintenance"*). The £5/mo is hosting/maintenance only; the build is quoted case by case (£199–£200+ so far). Writing "£5" reads as the whole website for £5 and undercuts live quotes. Say "เราทำเว็บให้ร้านไทยได้" and stop — price only in DMs. (Social £39/mo may still be stated; it IS the flat price.)
+12. **Before reusing a hero photo, check the page's recent NATIVE posts** (Korakot denied `wk3-ad-thai-owner`, 2026-09-17: *"i already using this photo to post, make something else"* — he had posted the PIN-till render himself on Sat 12). He posts natively too; `GET /{page}/posts` is the source of truth for what the audience has already seen, not the queue.
 10. **NEVER write a day relative to posting time** ("พรุ่งนี้วันจันทร์", "today", "tonight") — Korakot denied `wk2-kn-monday-numbers` (13 Sep 2026): *"the first word is tomorrow is monday, im not sure when is the post you plan to"*. He moves posts on the board/Planner, so a relative day goes stale and reads wrong. Name the day itself ("เช้าวันจันทร์แบบนี้") or leave the day out. Same for "this weekend", "in 3 days".
 9. **Captions must be SCANNABLE — never a wall of text** (Korakot 2026-07-23). Put a **blank line between distinct blocks/sections** (e.g. each day-born group, each service, intro→body→CTA→hashtags). One idea per line where it aids reading. FB strips leading spaces/indent alignment — use **blank lines**, not spaces, to separate. Skim-test every caption before enqueuing.
 

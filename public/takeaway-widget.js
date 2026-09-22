@@ -398,10 +398,20 @@
   // SEPOS-TA-PROMO-001 — optional spend threshold (0/unset = unconditional,
   // Chart Thai's existing behaviour). Server re-applies identically.
   function discountMin() { return Math.max(0, Number(state.settings?.discount_min_total) || 0); }
-  function cartTotal() { // order total after discount (before any handling fee)
+  // SEPOS-DELIVERY-FEE-001 — a tenant may keep the discount for collection
+  // only, and charge a distance-banded delivery fee (returned by the postcode
+  // check). Both are recomputed server-side; the PI amount must match.
+  function isDeliveryOrder() { return state.customer.order_subtype === 'delivery'; }
+  function discountAllowed() { return !(isDeliveryOrder() && state.settings && state.settings.delivery_discount_applies === false); }
+  function deliveryFee() {
+    const chk = state.customer.delivery_check;
+    return (isDeliveryOrder() && chk && chk.deliverable === true) ? (Number(chk.delivery_fee) || 0) : 0;
+  }
+  function cartTotal() { // order total after discount + delivery fee (before any handling fee)
     const gross = cartSubtotal();
-    const pct = discountPct();
-    return (pct > 0 && gross >= discountMin()) ? Math.round(gross * (1 - pct / 100) * 100) / 100 : gross;
+    const pct = discountAllowed() ? discountPct() : 0;
+    const afterDiscount = (pct > 0 && gross >= discountMin()) ? Math.round(gross * (1 - pct / 100) * 100) / 100 : gross;
+    return Math.round((afterDiscount + deliveryFee()) * 100) / 100;
   }
   // SEPOS-TA-CHOICE-001 — is THIS order being paid online right now?
   function payingOnline() { return state.stripeConfigured && !(state.payChoice && state.payAtRestaurant); }
@@ -754,7 +764,7 @@
     const okBox = `
       <div style="background:#e8f5e9;border:1px solid #43a047;border-radius:10px;
         padding:10px 12px;margin-top:8px;color:#1b5e20;font-size:13px;font-weight:600;">
-        ✓ Great news — we deliver to you${chk && chk.distance_miles != null ? ` (${chk.distance_miles} mi away)` : ''}.
+        ✓ Great news — we deliver to you${chk && chk.distance_miles != null ? ` (${chk.distance_miles} mi away)` : ''}${chk && Number(chk.delivery_fee) > 0 ? ` — delivery ${fmt(chk.delivery_fee)}` : ''}.
       </div>
       <label class="tw-label">Delivery address *</label>
       <textarea class="tw-input" id="tw-delivery-address" rows="3"
@@ -1145,6 +1155,7 @@
           state.customer.delivery_check = {
             deliverable:    !!data.deliverable,
             distance_miles: data.distance_miles != null ? data.distance_miles : null,
+            delivery_fee:   Number(data.delivery_fee) || 0,   // SEPOS-DELIVERY-FEE-001
             error:          data.error || '',
           };
         } catch (e) {
@@ -1426,6 +1437,7 @@
           delivery_address:  state.customer.order_subtype === 'delivery'
             ? [state.customer.delivery_address, state.customer.delivery_postcode].filter(Boolean).join(', ')
             : null,
+          delivery_postcode: state.customer.order_subtype === 'delivery' ? (state.customer.delivery_postcode || null) : null,   // SEPOS-DELIVERY-FEE-001
           delivery_notes:    state.customer.order_subtype === 'delivery'
             ? (state.customer.delivery_notes || null)
             : null,

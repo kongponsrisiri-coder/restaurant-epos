@@ -6382,6 +6382,15 @@ app.get('/api/reservations/settings/:restaurantId', widgetCors, async (req, res)
     const s = result.rows[0];
     if (!s.is_active) return res.status(403).json({ error: 'Online booking is currently disabled' });
     try { s.closed_days = JSON.parse(s.closed_days || '[]'); } catch { s.closed_days = []; }
+    // SEPOS-DEPOSIT-002 (Baan Rao, 22 Sep 2026) — online deposit at booking.
+    // settings: booking_deposit_min_party (e.g. 6) + booking_deposit_amount
+    // (£, flat per booking). Online only when the tenant can take cards.
+    try {
+      const d = await bookingDepositRule();
+      s.deposit_min_party = d.minParty;
+      s.deposit_amount = d.amount;
+      s.deposit_online = d.online;
+    } catch { s.deposit_min_party = 0; s.deposit_amount = 0; s.deposit_online = false; }
     res.json(s);
   } catch (err) {
     console.error('GET /api/reservations/settings error:', err);
@@ -6401,6 +6410,48 @@ app.get('/api/reservations', async (req, res) => {
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-DEPOSIT-002 — booking deposit rule + the Stripe intent for it.
+// Deposits already exist on the till (SEPOS-DEPOSIT-001: a typed voucher,
+// redeemed against the bill on the day, forfeitable on no-show). This is
+// Phase B: the guest pays it online while booking. Rule: a party of
+// booking_deposit_min_party or more pays booking_deposit_amount, flat per
+// booking. Verified server-side exactly like takeaway payments (SEPOS-047b).
+async function bookingDepositRule() {
+  const r = await pool.query(`SELECT key, value FROM settings WHERE key IN ('booking_deposit_min_party','booking_deposit_amount','takeaway_mock_pay')`);
+  const m = {}; r.rows.forEach(x => { m[x.key] = x.value; });
+  const minParty = Math.max(0, parseInt(m.booking_deposit_min_party, 10) || 0);
+  const amount = Math.round((Number(m.booking_deposit_amount) || 0) * 100) / 100;
+  const mock = String(m.takeaway_mock_pay || '') === '1';
+  const online = !mock && (!!process.env.STRIPE_SECRET_KEY || !!siampayCfg());
+  return { minParty, amount, online, required: minParty > 0 && amount > 0 };
+}
+function depositRequiredFor(rule, covers) {
+  return rule.required && rule.online && Number(covers) >= rule.minParty;
+}
+
+app.post('/api/reservations/deposit-intent', widgetCors, async (req, res) => {
+  try {
+    const covers = parseInt(req.body?.covers, 10) || 0;
+    const rule = await bookingDepositRule();
+    if (!depositRequiredFor(rule, covers)) return res.json({ required: false });
+    const sp = siampayCfg();
+    const stripe = require('stripe')(sp ? sp.key : process.env.STRIPE_SECRET_KEY);
+    const rid = resolveRestaurantId(req);
+    const params = {
+      amount: Math.round(rule.amount * 100), currency: 'gbp',
+      description: `Booking deposit · ${covers} guests`,
+      automatic_payment_methods: { enabled: true },
+      metadata: { kind: 'booking_deposit', restaurant_id: rid, covers: String(covers) },
+    };
+    const pi = sp ? await stripe.paymentIntents.create(params, { stripeAccount: sp.account }) : await stripe.paymentIntents.create(params);
+    res.json({ required: true, amount: rule.amount, client_secret: pi.client_secret, payment_intent_id: pi.id,
+               publishable_key: sp ? sp.pk : process.env.STRIPE_PUBLISHABLE_KEY, stripe_account: sp ? sp.account : null });
+  } catch (err) {
+    console.error('[deposit-intent]', err.message);
+    res.status(500).json({ error: 'Could not start the deposit payment — please try again.' });
+  }
 });
 
 app.post('/api/reservations', widgetCors, async (req, res) => {
@@ -6502,12 +6553,60 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
     // bookings to 'pending', contradicting the confirmation email the guest
     // had already been sent. `status` above resolves widget/online → 'confirmed',
     // explicit staff-form values unchanged, anything else → 'pending'.
+    // SEPOS-DEPOSIT-002 — a party at/over the threshold must have paid the
+    // deposit online before the booking is written. Verified with Stripe
+    // (succeeded, exact amount, our metadata, never used before).
+    let depositPI = null, depositAmount = 0;
+    const depRule = await bookingDepositRule();
+    if (depositRequiredFor(depRule, coversNum) && source === 'widget') {
+      const piId = String(req.body.payment_intent_id || '').trim();
+      if (!piId) return res.status(402).json({ error: `A £${depRule.amount.toFixed(2)} deposit is required for parties of ${depRule.minParty} or more.`, deposit_required: true, deposit_amount: depRule.amount });
+      try {
+        const spV = siampayCfg();
+        const pi = spV
+          ? await require('stripe')(spV.key).paymentIntents.retrieve(piId, {}, { stripeAccount: spV.account })
+          : await require('stripe')(process.env.STRIPE_SECRET_KEY).paymentIntents.retrieve(piId);
+        if (pi.status !== 'succeeded') return res.status(402).json({ error: 'The deposit payment has not completed.' });
+        if (pi.amount !== Math.round(depRule.amount * 100) || (pi.metadata || {}).kind !== 'booking_deposit') return res.status(402).json({ error: 'Deposit payment does not match — please refresh and try again.' });
+        const used = await pool.query('SELECT id FROM vouchers WHERE stripe_payment_intent_id = $1', [piId]);
+        if (used.rows[0]) return res.status(409).json({ error: 'This deposit payment has already been used for a booking.' });
+      } catch (e) {
+        if (e.statusCode === 404 || /No such payment_intent/i.test(e.message)) return res.status(402).json({ error: 'Deposit payment not found.' });
+        console.error('[deposit] verify', e.message);
+        return res.status(502).json({ error: 'Could not verify the deposit payment — please try again.' });
+      }
+      depositPI = piId; depositAmount = depRule.amount;
+    }
     const insertStatus = status;
     const result = await pool.query(
       `INSERT INTO reservations (restaurant_id, table_id, table_ids, customer_name, customer_phone, customer_email, covers, reservation_date, reservation_time, status, notes, source, marketing_consent) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [restaurant_id, assignTableId, assignTableIds, customer_name.trim(), customer_phone.trim(), customer_email?.trim() || null, coversNum, reservation_date, reservation_time, insertStatus, notes?.trim() || null, source, marketing_consent ? 1 : 0]
     );
     const reservation = result.rows[0];
+    // SEPOS-DEPOSIT-002 — the paid deposit becomes the same typed voucher the
+    // till already redeems (SEPOS-DEPOSIT-001): DEP- code, linked to the
+    // booking, expiry = booking date + 7 days grace.
+    if (depositPI) {
+      try {
+        let code = null;
+        for (let i = 0; i < 10; i++) {
+          code = voucherSvc.generateCode('DEP-');
+          const ex = await pool.query('SELECT id FROM vouchers WHERE code = $1', [code]);
+          if (!ex.rows[0]) break;
+        }
+        const d = new Date(reservation.reservation_date); d.setDate(d.getDate() + 7);
+        await pool.query(
+          `INSERT INTO vouchers
+             (code, original_amount, balance, recipient_name, recipient_email, expires_at,
+              payment_method, stripe_payment_intent_id, restaurant_id, type, reservation_id, take_date)
+           VALUES ($1,$2,$2,$3,$4,$5,'stripe',$6,$7,'deposit',$8, CURRENT_DATE)`,
+          [code, depositAmount, customer_name.trim(), customer_email?.trim() || null, d.toISOString().slice(0, 10),
+           depositPI, restaurant_id, reservation.id]);
+        reservation.deposit_code = code; reservation.deposit_amount = depositAmount;
+        reservation.notes = [reservation.notes, `£${depositAmount.toFixed(2)} deposit paid online (${code})`].filter(Boolean).join(' · ');
+        await pool.query('UPDATE reservations SET notes = $1 WHERE id = $2', [reservation.notes, reservation.id]);
+      } catch (e) { console.error('[deposit] voucher create failed for booking', reservation.id, e.message); }
+    }
     // SEPOS-BIRTHDAY-001 — the widget lets guests add day+month ('MM-DD', no
     // year). Best-effort upsert into customer_profiles with the same key
     // rules as the CRM view; a failure here never fails the booking.
@@ -8363,7 +8462,7 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
     // set both a restaurant postcode and a radius. The widget uses this
     // flag to decide whether to show the Delivery toggle at all.
     const dr = await pool.query(
-      `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles','takeaway_discount_percent','takeaway_discount_min_total')`
+      `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles','takeaway_discount_percent','takeaway_discount_min_total','delivery_fee_bands','delivery_discount_applies')`
     );
     const cfg = {};
     dr.rows.forEach(row => { cfg[row.key] = row.value; });
@@ -8382,6 +8481,8 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
       delivery_radius_miles: deliveryEnabled ? Number(cfg.delivery_radius_miles) : 0,
       discount_percent: discountPercent,
       discount_min_total: discountMinTotal,
+      delivery_fee_bands: deliveryEnabled ? parseDeliveryFeeBands(cfg.delivery_fee_bands) : [],   // SEPOS-DELIVERY-FEE-001
+      delivery_discount_applies: String(cfg.delivery_discount_applies ?? '1') !== '0',
       online_ordering_enabled: await onlineOrderingEnabled(),   // SEPOS-ONLINE-TOGGLE-001
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -8403,6 +8504,57 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
 // the postcode string so repeated checks don't re-hit postcodes.io for
 // the (unchanging) restaurant location.
 let _restaurantGeoCache = { postcode: null, lat: null, lng: null };
+
+// SEPOS-DELIVERY-FEE-001 (Baan Rao, 22 Sep 2026) — distance-banded delivery
+// fee. Setting `delivery_fee_bands` = JSON [{"max_miles":3,"fee":3.99}, …],
+// sorted ascending; the first band whose max_miles >= distance applies.
+// Unset/empty = free delivery (every tenant's behaviour until they opt in).
+// `delivery_discount_applies` = '0' keeps the online-order % discount for
+// COLLECTION only (Baan Rao's rule: "no discount" on delivery).
+function parseDeliveryFeeBands(raw) {
+  try {
+    const arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map(b => ({ max_miles: Number(b.max_miles), fee: Math.round(Number(b.fee) * 100) / 100 }))
+      .filter(b => Number.isFinite(b.max_miles) && b.max_miles > 0 && Number.isFinite(b.fee) && b.fee >= 0)
+      .sort((a, b) => a.max_miles - b.max_miles);
+  } catch { return []; }
+}
+function deliveryFeeFor(bands, distanceMiles) {
+  for (const b of bands) if (distanceMiles <= b.max_miles) return b.fee;
+  return null;   // beyond the last band (caller already enforces the radius)
+}
+// UK postcode pulled out of a free-text address (last resort when the
+// client didn't send delivery_postcode separately).
+function extractUkPostcode(text) {
+  const m = /\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b/i.exec(String(text || ''));
+  return m ? m[1].toUpperCase().replace(/\s+/g, ' ') : '';
+}
+async function deliveryQuote(postcode) {
+  // → { ok, distance_miles, fee, radius_miles, error }
+  const cfgRes = await pool.query(
+    `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles','delivery_fee_bands')`
+  );
+  const cfg = {}; cfgRes.rows.forEach(row => { cfg[row.key] = row.value; });
+  const restaurantPostcode = (cfg.restaurant_postcode || '').trim();
+  const radiusMiles = Number(cfg.delivery_radius_miles) || 0;
+  if (!restaurantPostcode || radiusMiles <= 0) return { ok: false, error: 'Delivery is not available from this restaurant.' };
+  if (_restaurantGeoCache.postcode !== restaurantPostcode) {
+    const g = await geocodePostcode(restaurantPostcode);
+    if (!g) return { ok: false, error: 'Restaurant postcode is misconfigured — contact the restaurant.', server: true };
+    _restaurantGeoCache = { postcode: restaurantPostcode, lat: g.lat, lng: g.lng };
+  }
+  const cust = await geocodePostcode(postcode);
+  if (!cust) return { ok: false, error: "We couldn't find that postcode — please check it.", radius_miles: radiusMiles };
+  const distance = haversineMiles(_restaurantGeoCache.lat, _restaurantGeoCache.lng, cust.lat, cust.lng);
+  const distanceRounded = Math.round(distance * 10) / 10;
+  if (distance > radiusMiles) return { ok: false, distance_miles: distanceRounded, radius_miles: radiusMiles };
+  const bands = parseDeliveryFeeBands(cfg.delivery_fee_bands);
+  const fee = bands.length ? deliveryFeeFor(bands, distanceRounded) : 0;
+  if (fee === null) return { ok: false, distance_miles: distanceRounded, radius_miles: radiusMiles, error: `Sorry — we deliver up to ${bands[bands.length - 1].max_miles} miles.` };
+  return { ok: true, distance_miles: distanceRounded, radius_miles: radiusMiles, fee };
+}
 
 function haversineMiles(lat1, lon1, lat2, lon2) {
   const R = 3958.8; // mean earth radius, miles
@@ -8430,41 +8582,14 @@ app.get('/api/takeaway/delivery-check', widgetCors, async (req, res) => {
   try {
     const postcode = String(req.query.postcode || '').trim();
     if (!postcode) return res.status(400).json({ deliverable: false, error: 'Postcode required' });
-
-    // Operator config.
-    const cfgRes = await pool.query(
-      `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles')`
-    );
-    const cfg = {};
-    cfgRes.rows.forEach(row => { cfg[row.key] = row.value; });
-    const restaurantPostcode = (cfg.restaurant_postcode || '').trim();
-    const radiusMiles = Number(cfg.delivery_radius_miles) || 0;
-    if (!restaurantPostcode || radiusMiles <= 0) {
-      return res.json({ deliverable: false, error: 'Delivery is not available from this restaurant.' });
+    const q = await deliveryQuote(postcode);
+    if (!q.ok) {
+      if (q.server) return res.status(500).json({ deliverable: false, error: q.error });
+      return res.json({ deliverable: false, distance_miles: q.distance_miles, radius_miles: q.radius_miles, error: q.error });
     }
-
-    // Resolve the restaurant location (cached).
-    if (_restaurantGeoCache.postcode !== restaurantPostcode) {
-      const g = await geocodePostcode(restaurantPostcode);
-      if (!g) return res.status(500).json({ deliverable: false, error: 'Restaurant postcode is misconfigured — contact the restaurant.' });
-      _restaurantGeoCache = { postcode: restaurantPostcode, lat: g.lat, lng: g.lng };
-    }
-
-    // Resolve the customer postcode.
-    const cust = await geocodePostcode(postcode);
-    if (!cust) {
-      return res.json({ deliverable: false, error: "We couldn't find that postcode — please check it." });
-    }
-
-    const distance = haversineMiles(
-      _restaurantGeoCache.lat, _restaurantGeoCache.lng, cust.lat, cust.lng
-    );
-    const distanceRounded = Math.round(distance * 10) / 10;
-    res.json({
-      deliverable: distance <= radiusMiles,
-      distance_miles: distanceRounded,
-      radius_miles: radiusMiles,
-    });
+    // SEPOS-DELIVERY-FEE-001 — fee travels with the check so the page can show
+    // it before payment; the order endpoint recomputes it from the postcode.
+    res.json({ deliverable: true, distance_miles: q.distance_miles, radius_miles: q.radius_miles, delivery_fee: q.fee });
   } catch (err) {
     console.error('GET /api/takeaway/delivery-check error:', err);
     res.status(500).json({ deliverable: false, error: 'Could not check your postcode — please try again.' });
@@ -8494,6 +8619,7 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
       order_subtype = 'collection',
       delivery_address,
       delivery_notes,
+      delivery_postcode,   // SEPOS-DELIVERY-FEE-001 — fee is recomputed from it server-side
       // SEPOS-040 — real Stripe payment. Absent in demo/mock mode.
       payment_intent_id,
     } = req.body;
@@ -8694,14 +8820,32 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
     let discountPercent = 0;
     let discountMinTotal = 0;
     try {
-      const dset = await client.query(`SELECT key, value FROM settings WHERE key IN ('takeaway_discount_percent','takeaway_discount_min_total')`);
+      const dset = await client.query(`SELECT key, value FROM settings WHERE key IN ('takeaway_discount_percent','takeaway_discount_min_total','delivery_discount_applies')`);
       const dm = {}; dset.rows.forEach(r => { dm[r.key] = r.value; });
       discountPercent = Math.min(50, Math.max(0, Number(dm.takeaway_discount_percent) || 0));
       // SEPOS-TA-PROMO-001 — spend threshold; 0/unset = unconditional.
       discountMinTotal = Math.max(0, Number(dm.takeaway_discount_min_total) || 0);
+      // SEPOS-DELIVERY-FEE-001 — '0' = the discount is for collection only.
+      if (subtype === 'delivery' && String(dm.delivery_discount_applies ?? '1') === '0') discountPercent = 0;
     } catch { /* setting absent → no discount */ }
     if (discountPercent > 0 && total >= discountMinTotal) {
       total = Math.round(total * (1 - discountPercent / 100) * 100) / 100;
+    }
+
+    // SEPOS-DELIVERY-FEE-001 — distance-banded delivery fee, recomputed here
+    // from the postcode (never trusted from the client) and added to the
+    // server-priced total BEFORE the paid-amount check. Goes onto the order
+    // as its own line so the till, kitchen ticket, receipt, reports and Z all
+    // see it without any of them changing.
+    let deliveryFee = 0, deliveryDistance = null;
+    if (subtype === 'delivery') {
+      const pc = String(delivery_postcode || '').trim() || extractUkPostcode(delivery_address);
+      if (!pc) return res.status(400).json({ error: 'Delivery postcode is required' });
+      const q = await deliveryQuote(pc);
+      if (!q.ok) return res.status(400).json({ error: q.error || `Sorry — that address is outside our ${q.radius_miles || ''} mile delivery area.` });
+      deliveryFee = Number(q.fee) || 0;
+      deliveryDistance = q.distance_miles;
+      total = Math.round((total + deliveryFee) * 100) / 100;
     }
 
     // SEPOS-047b — the paid amount must match the server-priced total.
@@ -8788,6 +8932,19 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
          it.item_note || '', now, restaurantId]
       );
       insertedItemIds.push(ins.rows[0].id);
+    }
+    if (subtype === 'delivery' && deliveryFee > 0) {
+      // SEPOS-DELIVERY-FEE-001 — the fee as a served (non-kitchen) line: it
+      // prints on the receipt and counts in sales, but never shows as a dish
+      // to cook. course 1 so it sits with the order; status 'served' keeps it
+      // off the KDS.
+      await client.query(
+        `INSERT INTO order_items
+           (order_id, menu_item_id, item_name, quantity, unit_price, notes, course,
+            item_note, is_fired, fired_at, cooking_started_at, status, restaurant_id)
+         VALUES ($1, NULL, $2, 1, $3, '', 1, '', 1, $4, $4, 'served', $5)`,
+        [orderId, `🛵 Delivery fee (${deliveryDistance} mi)`, deliveryFee, now, restaurantId]
+      );
     }
     await client.query('COMMIT');
 

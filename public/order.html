@@ -108,8 +108,13 @@
   // give a discount the till doesn't).
   const promoPct  = () => Math.min(50, Math.max(0, Number(twSet && twSet.discount_percent) || 0));
   const promoMin  = () => Math.max(0, Number(twSet && twSet.discount_min_total) || 0);
-  const promoOff  = () => { const t = cartTotal(); return (promoPct() > 0 && t >= promoMin()) ? Math.round(t * (promoPct() / 100) * 100) / 100 : 0; };
-  const payTotal  = () => Math.round((cartTotal() - promoOff()) * 100) / 100;
+  // SEPOS-DELIVERY-FEE-001 — the discount may be collection-only, and a
+  // delivery order carries the banded fee the postcode check returned. Both
+  // are recomputed server-side; the PI amount must match, as before.
+  const promoAllowed = () => !(isDeliv() && twSet && twSet.delivery_discount_applies === false);
+  const promoOff  = () => { const t = cartTotal(); return (promoAllowed() && promoPct() > 0 && t >= promoMin()) ? Math.round(t * (promoPct() / 100) * 100) / 100 : 0; };
+  const deliveryFee = () => (isDeliv() && fulfil.check && fulfil.check.deliverable === true) ? (Number(fulfil.check.delivery_fee) || 0) : 0;
+  const payTotal  = () => Math.round((cartTotal() - promoOff() + deliveryFee()) * 100) / 100;
   const itemQty = (id) => cart.filter((c) => c.menu_item_id === id).reduce((a, c) => a + c.quantity, 0);
   const ukTime = (iso) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
 
@@ -259,8 +264,14 @@
     if (promoOff() > 0) {
       h += '<div class="totrow" style="font-size:13px;font-weight:600;color:#555;padding:6px 0 0"><span>Subtotal</span><span>' + fmt(cartTotal()) + '</span></div>';
       h += '<div class="totrow" style="font-size:13px;font-weight:700;color:#256b34;padding:2px 0 0"><span>💚 ' + promoPct() + '% discount' + (promoMin() > 0 ? ' (orders over ' + fmt(promoMin()) + ')' : '') + '</span><span>−' + fmt(promoOff()) + '</span></div>';
-    } else if (promoPct() > 0 && promoMin() > 0) {
+    } else if (promoAllowed() && promoPct() > 0 && promoMin() > 0) {
       h += '<div class="totrow" style="font-size:12px;font-weight:600;color:#888;padding:6px 0 0"><span>💚 Spend ' + fmt(promoMin()) + ' for ' + promoPct() + '% off</span><span>' + fmt(Math.max(0, promoMin() - cartTotal())) + ' to go</span></div>';
+    } else if (isDeliv() && !promoAllowed() && promoPct() > 0) {
+      h += '<div class="totrow" style="font-size:12px;font-weight:600;color:#888;padding:6px 0 0"><span>💚 ' + promoPct() + '% off applies to collection orders</span><span></span></div>';
+    }
+    if (deliveryFee() > 0) {
+      if (promoOff() <= 0) h += '<div class="totrow" style="font-size:13px;font-weight:600;color:#555;padding:6px 0 0"><span>Subtotal</span><span>' + fmt(cartTotal()) + '</span></div>';
+      h += '<div class="totrow" style="font-size:13px;font-weight:600;color:#555;padding:2px 0 0"><span>🛵 Delivery' + (fulfil.check.distance_miles ? ' (' + fulfil.check.distance_miles + ' mi)' : '') + '</span><span>' + fmt(deliveryFee()) + '</span></div>';
     }
     h += '<div class="totrow"><span>Total</span><span>' + fmt(payTotal()) + '</span></div>';
     // SEPOS-DELIVERY-003 — collection / delivery choice (only when the
@@ -276,7 +287,7 @@
                '<button id="d-check">' + (fulfil.checking ? '…' : 'Check') + '</button></div>';
           if (c && c.deliverable === false) h += '<div class="pcbad">' + esc(c.error || ('Sorry — outside our ' + (c.radius_miles || '') + ' mile delivery area' + (c.distance_miles ? ' (you are ' + c.distance_miles + ' mi away)' : '') + '.')) + '</div>';
         } else {
-          h += '<div class="pcok">✅ Delivering to <b>' + esc(fulfil.postcode.toUpperCase()) + '</b>' + (c.distance_miles ? ' (' + c.distance_miles + ' mi)' : '') + '</div>';
+          h += '<div class="pcok">✅ Delivering to <b>' + esc(fulfil.postcode.toUpperCase()) + '</b>' + (c.distance_miles ? ' (' + c.distance_miles + ' mi)' : '') + (Number(c.delivery_fee) > 0 ? ' · delivery ' + fmt(c.delivery_fee) : ' · free delivery') + '</div>';
           h += '<div class="contact">' +
             '<input id="d-address" placeholder="Delivery address (house/flat, street) *" value="' + esc(fulfil.address) + '">' +
             '<input id="d-notes" placeholder="Delivery note (gate code, ring bell… — optional)" value="' + esc(fulfil.notes) + '"></div>';
@@ -427,6 +438,7 @@
         payment_intent_id: piId,
         order_subtype: isDeliv() ? 'delivery' : 'collection',
         delivery_address: isDeliv() ? (fulfil.address.trim() + ', ' + fulfil.postcode.trim().toUpperCase()) : undefined,
+        delivery_postcode: isDeliv() ? fulfil.postcode.trim().toUpperCase() : undefined,   // SEPOS-DELIVERY-FEE-001
         delivery_notes: isDeliv() ? (fulfil.notes.trim() || undefined) : undefined,
       }) }).then((x) => x.json());
       if (r.error) throw new Error(r.error);

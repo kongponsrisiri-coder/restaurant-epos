@@ -70,6 +70,9 @@ jobs:
           - label: Fern POS
             site_id: baee3149-41a5-4e3f-98ca-8eb04d51c6af
             api_url: https://fern.siamepos.co.uk
+          - label: Ma-prang demo POS
+            site_id: 8e41b2d2-1729-417e-812d-c4e05ae2d2ac
+            api_url: https://siamepos-maprang-demo-production.up.railway.app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

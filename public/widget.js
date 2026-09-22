@@ -36,6 +36,7 @@
   let ACCENT   = OVERRIDE_COLOR || '#1a472a';
   let step     = 1;
   let selected = { date: '', covers: 2, time: '', slots: [] };
+  let pending  = null;   // SEPOS-DEPOSIT-002 — step-3 details held across the deposit card step
 
   // ── Helpers ──────────────────────────────────────────────────
   function todayISO() { return new Date().toISOString().split('T')[0]; }
@@ -403,7 +404,7 @@
   }
 
   // ── Step rendering ───────────────────────────────────────────
-  function renderStep(n) {
+  function renderStep(n, data) {
     step = n;
     for (let i = 1; i <= 4; i++) {
       const tab = el(`sw-tab-${i}`);
@@ -413,7 +414,7 @@
     if (n === 1) renderStep1();
     if (n === 2) renderStep2();
     if (n === 3) renderStep3();
-    if (n === 4) renderStep4();
+    if (n === 4) renderStep4(data);
   }
 
   // Step 1 — Date + Covers
@@ -454,15 +455,30 @@
 
   // SEPOS-050 — once the guest count reaches the restaurant's online cap,
   // tell the customer to phone for bigger parties.
+  // SEPOS-DEPOSIT-002 — online deposit for larger parties (settings from the
+  // tenant: deposit_min_party, deposit_amount, deposit_online).
+  function depositNeeded() {
+    return !!(settings && settings.deposit_online && Number(settings.deposit_min_party) > 0 &&
+              Number(settings.deposit_amount) > 0 && selected.covers >= Number(settings.deposit_min_party));
+  }
+  function depositAmountFmt() { return '£' + Number(settings?.deposit_amount || 0).toFixed(2); }
+  let deposit = { pi: null, stripe: null, elements: null };   // paid intent carried into the booking POST
+
   function updatePartyNote() {
     const note = el('sw-party-note');
     if (!note) return;
     const maxParty = settings?.max_party_size || 8;
+    const depLine = depositNeeded()
+      ? `💳 Parties of ${settings.deposit_min_party} or more pay a <strong>${depositAmountFmt()} deposit</strong> when booking — it comes off your bill on the day.`
+      : '';
     if (selected.covers >= maxParty) {
       const phone = settings?.restaurant_phone;
-      note.innerHTML = phone
+      note.innerHTML = (phone
         ? `Larger party? For groups of more than ${maxParty}, please call us on <strong>${phone}</strong>.`
-        : `Larger party? For groups of more than ${maxParty}, please contact the restaurant directly.`;
+        : `Larger party? For groups of more than ${maxParty}, please contact the restaurant directly.`) + (depLine ? '<br>' + depLine : '');
+      note.style.display = '';
+    } else if (depLine) {
+      note.innerHTML = depLine;
       note.style.display = '';
     } else {
       note.style.display = 'none';
@@ -605,7 +621,7 @@
         <span>I'd like to receive occasional offers and updates by email.<br><span style="font-size:11px;color:#888;">You can unsubscribe at any time.</span></span>
       </label>
       <div id="sw-error"></div>
-      <button class="sw-btn sw-btn-primary" id="sw-submit">Confirm Booking</button>
+      <button class="sw-btn sw-btn-primary" id="sw-submit">${depositNeeded() ? 'Continue to ' + depositAmountFmt() + ' deposit →' : 'Confirm Booking'}</button>
       <button class="sw-btn sw-btn-back" id="sw-back-3">← Back</button>
     `;
     el('sw-back-3').addEventListener('click', () => renderStep(2));
@@ -637,6 +653,7 @@
           ${bookingData?.customer_email
             ? 'A confirmation has been sent to your email.'
             : 'The restaurant will be in touch to confirm your booking.'}
+          ${bookingData?.deposit_code ? `<br><br>💳 Your <strong>£${Number(bookingData.deposit_amount).toFixed(2)} deposit</strong> is paid and will be taken off your bill on the day.<br><span style="font-size:12px;color:#888;">Deposit ref ${bookingData.deposit_code}</span>` : ''}
         </p>
         <button class="sw-btn sw-btn-primary" id="sw-done-btn">Done</button>
       </div>
@@ -657,12 +674,19 @@
     const bdayMonth = Number(el('sw-bday-month')?.value) || 0;
     const birthday = (bdayDay && bdayMonth)
       ? `${String(bdayMonth).padStart(2, '0')}-${String(bdayDay).padStart(2, '0')}`
-      : null;
+      : (pending && pending.birthday) || null;   // carried across the deposit step
     if (!name)  { showError('Please enter your name'); return; }
     if (!phone) { showError('Please enter your phone number'); return; }
-    const btn = el('sw-submit');
-    btn.disabled = true;
-    btn.textContent = '⏳ Confirming…';
+    // SEPOS-DEPOSIT-002 — larger parties pay the deposit first (card step),
+    // then the booking is submitted with the paid intent for the server to
+    // verify. Guest details are kept on `pending` across the step.
+    if (depositNeeded() && !deposit.pi) {
+      pending = { name, phone, email, notes, marketing, birthday };
+      renderDepositStep();
+      return;
+    }
+    const btn = el('sw-submit') || el('sw-dep-pay');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Confirming…'; }
     try {
       const r = await fetch(`${API}/api/reservations`, {
         method: 'POST',
@@ -674,28 +698,91 @@
           reservation_time: selected.time, notes: notes || null, source: 'widget',
           marketing_consent: marketing ? 1 : 0,
           customer_birthday: birthday,
+          payment_intent_id: deposit.pi || undefined,   // SEPOS-DEPOSIT-002
         }),
       });
       const data = await r.json();
       if (!r.ok || data.error) {
         showError(data.error || 'Something went wrong. Please try again.');
-        btn.disabled = false;
-        btn.textContent = 'Confirm Booking';
+        if (btn) { btn.disabled = false; btn.textContent = 'Confirm Booking'; }
         return;
       }
+      pending = null; deposit = { pi: null, stripe: null, elements: null };
       renderStep(4, { ...data.reservation, customer_email: email });
     } catch (err) {
       showError('Connection error. Please check your internet and try again.');
-      btn.disabled = false;
-      btn.textContent = 'Confirm Booking';
+      if (btn) { btn.disabled = false; btn.textContent = 'Confirm Booking'; }
       console.error('[SiamEPOS Widget] Submit error:', err);
     }
+  }
+
+
+  // SEPOS-DEPOSIT-002 — Step 3b: card payment for the deposit (Stripe Payment
+  // Element on the tenant's own keys or SiamPay). On success the booking POST
+  // runs with the intent id; the server verifies it before writing anything.
+  async function renderDepositStep() {
+    el('sw-body').innerHTML = `
+      <div id="sw-summary">
+        📅 <strong>${fmtDate(selected.date)}</strong> · 🕐 <strong>${selected.time}</strong> · 👥 <strong>${selected.covers} guests</strong>
+      </div>
+      <div style="font-size:14px;line-height:1.5;color:#444;margin:6px 0 12px;">
+        A <strong>${depositAmountFmt()} deposit</strong> secures a table for ${settings.deposit_min_party}+ guests. It's taken off your bill on the day.
+      </div>
+      <div id="sw-payel" style="min-height:120px;margin:8px 0;"></div>
+      <div id="sw-error"></div>
+      <button class="sw-btn sw-btn-primary" id="sw-dep-pay" disabled>Loading card form…</button>
+      <button class="sw-btn sw-btn-back" id="sw-back-dep">← Back</button>
+    `;
+    el('sw-back-dep').addEventListener('click', () => { deposit = { pi: null, stripe: null, elements: null }; renderStep(3); restorePending(); });
+    try {
+      const r = await fetch(`${API}/api/reservations/deposit-intent`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurant_id: RESTAURANT_ID, covers: selected.covers }),
+      });
+      const j = await r.json();
+      if (j.error) throw new Error(j.error);
+      if (!j.required) { deposit.pi = null; submitFromPending(); return; }   // rule changed meanwhile — no deposit after all
+      if (!window.Stripe) await new Promise((ok, bad) => { const sc = document.createElement('script'); sc.src = 'https://js.stripe.com/v3/'; sc.onload = ok; sc.onerror = bad; document.head.appendChild(sc); });
+      deposit.stripe = j.stripe_account ? window.Stripe(j.publishable_key, { stripeAccount: j.stripe_account }) : window.Stripe(j.publishable_key);
+      deposit.elements = deposit.stripe.elements({ clientSecret: j.client_secret });
+      const payEl = deposit.elements.create('payment');
+      payEl.mount('#sw-payel');
+      const pb = el('sw-dep-pay');
+      payEl.on('ready', () => { pb.disabled = false; pb.textContent = `Pay ${depositAmountFmt()} deposit & confirm booking`; });
+      pb.addEventListener('click', async () => {
+        hideError(); pb.disabled = true; pb.textContent = '⏳ Taking payment…';
+        const { error } = await deposit.stripe.confirmPayment({ elements: deposit.elements, redirect: 'if_required' });
+        if (error) { showError(error.message || 'Payment failed'); pb.disabled = false; pb.textContent = `Pay ${depositAmountFmt()} deposit & confirm booking`; return; }
+        deposit.pi = j.payment_intent_id;
+        submitFromPending();
+      });
+    } catch (e) {
+      showError(e.message || 'Could not load the deposit payment — please try again.');
+    }
+  }
+  function restorePending() {
+    if (!pending) return;
+    const set = (id, v) => { const x = el(id); if (x) x.value = v || ''; };
+    set('sw-name', pending.name); set('sw-phone', pending.phone); set('sw-email', pending.email); set('sw-notes', pending.notes);
+    const mk = el('sw-marketing'); if (mk) mk.checked = !!pending.marketing;
+  }
+  // Re-enter submitBooking with the captured details (the inputs are gone from the DOM).
+  function submitFromPending() {
+    if (!pending) return;
+    const stash = pending;
+    // Temporarily rebuild the fields submitBooking reads from.
+    const holder = document.createElement('div'); holder.style.display = 'none'; holder.id = 'sw-pending-holder';
+    holder.innerHTML = `<input id="sw-name" value=""><input id="sw-phone" value=""><input id="sw-email" value=""><input id="sw-notes" value=""><input type="checkbox" id="sw-marketing">`;
+    el('sw-body').appendChild(holder);
+    el('sw-name').value = stash.name; el('sw-phone').value = stash.phone; el('sw-email').value = stash.email; el('sw-notes').value = stash.notes; el('sw-marketing').checked = !!stash.marketing;
+    submitBooking();
   }
 
   // ── Open / Close ─────────────────────────────────────────────
   function openWidget() {
     buildHTML();
     selected = { date: todayISO(), covers: 2, time: '', slots: [] };
+    pending = null; deposit = { pi: null, stripe: null, elements: null };   // SEPOS-DEPOSIT-002
     renderStep(1);
     el('sw-progress').style.display = '';
     el('sw-overlay').classList.add('sw-open');

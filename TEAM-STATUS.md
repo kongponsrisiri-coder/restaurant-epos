@@ -582,6 +582,17 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 🌙 KRIT SESSION WRAP — Mon 21 → Tue 22 Sep 2026 (Korakot: "restart the terminal, pack everything")
+**Shipped / live:**
+- **Ma-prang demo tenant** (siamepos-maprang-demo; browser till siamepos-maprang-pos.netlify.app PIN 2526; loader `scripts/maprang-demo-load.js`).
+- **Phakoon new dual-screen till** installed on site via RustDesk 288915029 (config via `%APPDATA%\siamepos-electron\config.json`; start-with-Windows + screen-2 display launcher; TZ London). Go-live 1 Oct — wipe the night before.
+- **Releases repo guard** (auto-flips non-desktop full releases to prerelease) after spa-v1.3.0/1.4.0/1.4.1 hijacked the desktop updater 3×; Sam's recipe + CLAUDE.md carry `--prerelease` (spa main pushed 23:52).
+- **Netlify credit drain** stopped (spa sites `stop_builds`); **Thann Thai social keys** in (Mint can enqueue); Control Room Social shows a client pill as soon as its page is connected.
+- **Spa iOS app (SPA-IOS-001)**: scaffold + build 1.4.1 (2) on TestFlight, external review pending, public link testflight.apple.com/join/4mAthhUM; branch `ios-app` pushed. Push notifications = second pass (needs APNs key from Korakot).
+- **Baan Rao launch**: Stripe verified, Brevo + PUBLIC_API_URL fixed, real hours (kitchen 21:30, Wed–Sat break), **SEPOS-DELIVERY-FEE-001** (banded fee, collection-only discount) + **SEPOS-DEPOSIT-002** (£20 online deposit for 6+) built, tested, live on the fleet (`d5f44aa`); old mockup 301s to the redesign; **Maya has the GO** to put baanrao-redesign.pages.dev on their domain.
+**Carry-overs:** Admin UI for `delivery_fee_bands` / `delivery_discount_applies` / `booking_deposit_*` (API-only today) · Baan Rao phone on booking profile · picker/delete `server.js` fixes (07 vs +44 rows; Delete ignores dine-in 👤 bills) still waiting for a go · SEPOS-VOUCHER-YEAR-001 · Baan Rao till 7 quarantined queue rows · loyalty: Google Wallet issuer, Twilio, rewards.siamepos.co.uk · v1.9.68 still HELD · Chart Thai Sunmi RustDesk (sheet on Desktop) · spa TestFlight internal group quirk (next build lands normally).
+— Krit, 22 Sep 23:58
+
 ### 🌿 MINT — SESSION WRAP (Tue 22 Sep ~19:0x, Korakot restarting the terminal) · resume brief: `~/Documents/SiamEPOS-Docs/social/MINT-RESUME-BRIEF-2026-09-22.md` (+.pdf)
 **Open for Korakot:** (1) Thann Thai owner items — service price (blank £ in `social/thann-thai/_owner-message-DRAFT.md`), never-list, IG link, model consent, fresh photos; (2) OK on the cream/gold Thann logo recolours (in use on the approved cards); (3) decide who fixes SEPOS-VOUCHER-YEAR-001 (Krit session, or an explicit go to Mint); (4) weekly-report-with-Mac-off: `pmset` wake or a Railway cron (token decision). **Open for Mint next session:** board denies → v-next; verify Thann Thai 22 + 29 Oct handed over (~23 / ~30 Sep); Sun 27 Sep planning run (wk1 Oct, 5 posts, check native posts first); Thann Thai November batch mid-Oct. **Pipe health:** SiamEPOS + Thann Thai on Meta's scheduler; founder post Sat 26 10:00 pending; Baan Rao welcome Tue 22 — check it fired. All rules from this session are in MINT.md.
 

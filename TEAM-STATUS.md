@@ -599,8 +599,14 @@ Spec: `~/Documents/Claude/Projects/SiamEpos/SEPOS-SEC-DATAFILES-001-Public-Repo-
 - **Order:** ① classify the contents (personal data? credentials?) ② `git rm --cached` + push ③ rotate any exposed secret ④ if personal data → **STOP, tell Korakot + Nick** before any history rewrite (force-push = Korakot's explicit go), and Nick runs the GDPR 72-hour assessment ⑤ check the whole history (plus the spa/shop repos) for the same kind of file.
 
 
-### 🏢 Wed 23 Sep — SEPOS-GROUP-001 Group Owner app DEMO — IN PROGRESS (Krit, Korakot: "ok build the demo")
-Multi-site back office, read-only, as its OWN service beside the till (loyalty pattern) — no tenant/till/print changes. Reads each branch's existing `/api/sync/closed-orders` + `/api/sync/active-orders` + `/api/health` with that branch's sync secret (server-side only). Demo branches = Baan Siam + Ma-prang demo as two pretend sites. Target: show Phakoon before 1 Oct. — Krit
+### 🏢 Wed 23 Sep — SEPOS-GROUP-001 Group Owner app DEMO — ✅ LIVE (Krit, Korakot: "ok build the demo")
+**https://group-web-production-c464.up.railway.app** — password in `scripts/.secrets-group-demo.txt` (gitignored). Installable PWA (phone/tablet/desktop), screens **Overview · Live · Bills · Status**, branch filter + Today/Yesterday/7/30 days. Demo = "Baan Siam Group": **Clapham** (baan-siam cloud) + **Balham** (maprang-demo cloud); `DEMO_INCLUDE_MOCK=1` counts demo payments, with a banner saying so.
+- **Beside the till, READ-ONLY** (loyalty pattern): its own repo `~/Desktop/siamepos-group` (local git, NOT on GitHub yet) + Railway project `siamepos-group` / service `group-web`. Reads each branch's existing `/api/sync/closed-orders` + `/api/sync/active-orders` (sync secret held server-side only) + public `/api/health`, `/api/tables`, `/api/clock/status`. **Zero changes to any till, tenant cloud or print path.**
+- **Money = the till's own rules** (excl. cancelled/Complimentary/mock, split-pay dedupe, merge shells, restaurant-day in Europe/London). **Checked to the penny** vs each tenant's `/api/reports/summary`, 25 Aug–23 Sep: Baan Siam £943.19/27 bills, Ma-prang £155.34/3. `npm test` covers the rules.
+- Verified: 401 without sign-in, wrong password 401 (5 tries → 1 min lockout), HttpOnly+Secure cookie, secrets file not served, no console errors, 390 px layout with no sideways scroll, light + dark.
+- **⚠️ Security note found on the way (NOT changed):** `/api/reports/summary` and `/api/clock/status` answer **without auth** on tenant clouds (checked on maprang-demo) = anyone with a tenant URL can read takings and staff names. Same class as the "public GETs" in the SEC-2026-07 posture; needs a ticket + a quiet-hours release, not a demo-day change.
+- **Phase 2 (NOT built, needs a go):** menu push / 86 a dish across branches, group customers, per-owner logins and an ops "group" record. Per-client setup today = a new Railway service + GROUP_BRANCHES env.
+— Krit
 
 ### 🛶 IN PROGRESS Wed 23 Sep — PIPELINE RUN: THE GREAT THAI (thegreatthai.co.uk) (Maya; Korakot dropped the URL)
 Extract → archive → mockup (Cloudflare `greatthai-sandy`) → SEO analysis → PDF. Folder `~/Documents/SiamEPOS-Docs/client-sites/the-great-thai/`. Row updates when delivered. — Maya

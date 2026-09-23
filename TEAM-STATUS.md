@@ -591,6 +591,14 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
+### 🔴 FOR KRIT — SEPOS-SEC-DATAFILES-001: data files readable in the PUBLIC repo (Nick, 23 Sep · Korakot will ping you)
+Spec: `~/Documents/Claude/Projects/SiamEpos/SEPOS-SEC-DATAFILES-001-Public-Repo-Data-Files.md`
+- **Still tracked on main now:** `scripts/.secrets-yumyum-testdata-backup-2026-08-25.json` (since `6f7e9f0`, 25 Aug; the 28 Aug `.gitignore` fix doesn't cover files that were already tracked) and **`restaurant.db`**.
+- **Still in public history:** the Phakoon + Yum Yum-allergen backups untracked in `22d6e43` (from `a5b31b4`).
+- **Contents NOT opened.** Nick was stopped by the classifier (possible personal data), so we don't know yet whether they're real customers or test rows.
+- **Order:** ① classify the contents (personal data? credentials?) ② `git rm --cached` + push ③ rotate any exposed secret ④ if personal data → **STOP, tell Korakot + Nick** before any history rewrite (force-push = Korakot's explicit go), and Nick runs the GDPR 72-hour assessment ⑤ check the whole history (plus the spa/shop repos) for the same kind of file.
+
+
 ### 🏢 Wed 23 Sep — SEPOS-GROUP-001 Group Owner app DEMO — IN PROGRESS (Krit, Korakot: "ok build the demo")
 Multi-site back office, read-only, as its OWN service beside the till (loyalty pattern) — no tenant/till/print changes. Reads each branch's existing `/api/sync/closed-orders` + `/api/sync/active-orders` + `/api/health` with that branch's sync secret (server-side only). Demo branches = Baan Siam + Ma-prang demo as two pretend sites. Target: show Phakoon before 1 Oct. — Krit
 

@@ -49,3 +49,6 @@ scripts/menu-snapshot-*.json
 *.sqlite3
 *.dump
 *.sql.gz
+
+# SEPOS-SEC-DATAFILES-001 — stray curl/browser output files
+/download

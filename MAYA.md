@@ -189,7 +189,7 @@ Do NOT stop to ask permission, and do NOT stop early — the deliverable is the 
 | 1 | **Extract** — crawl the live public site | `pages/` (mirrored HTML) |
 | 2 | **Archive** — photos, menus, findings | `photos/` · `menus/` · `notes.md` |
 | 3 | **Build the NEW site** — must be clearly better than theirs | `site/` + `build-site.js` |
-| 4 | **SEO analysis** | `seo-analysis.md` |
+| 4 | **SEO analysis** — ⭐ **lead with an overall score /100** (Korakot loved it, 23 Sep, Great THAI 28/100) | `seo-analysis.md` |
 | 5 | **Branded PDF** ⚠️ *the one I keep forgetting* | `seo-analysis.pdf` |
 
 **Canonical folder:** `~/Documents/SiamEPOS-Docs/client-sites/<client-slug>/`

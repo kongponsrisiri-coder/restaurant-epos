@@ -38,3 +38,14 @@ client/android/node-host/
 Claude Chat history/
 *.chat-export.json
 scripts/menu-snapshot-*.json
+
+# SEPOS-SEC-DATAFILES-001 — no data files in this PUBLIC repo, ever.
+# (ignore rules don't untrack files already committed — git rm --cached those)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.dump
+*.sql.gz

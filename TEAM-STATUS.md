@@ -591,6 +591,9 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
+### 🔴 IN PROGRESS — Krit on SEPOS-SEC-DATAFILES-001 (Korakot pinged 23 Sep ~16:40)
+Step 2 done: `restaurant.db` + `scripts/.secrets-yumyum-testdata-backup-2026-08-25.json` untracked from main, `.gitignore` now covers `*.db`/`*.sqlite*`. They are still in public HISTORY. Classifying contents now (counts/field names only, nothing pasted). **No history rewrite / force-push without Korakot's go.** — Krit
+
 ### 🔴 FOR KRIT — SEPOS-SEC-DATAFILES-001: data files readable in the PUBLIC repo (Nick, 23 Sep · Korakot will ping you)
 Spec: `~/Documents/Claude/Projects/SiamEpos/SEPOS-SEC-DATAFILES-001-Public-Repo-Data-Files.md`
 - **Still tracked on main now:** `scripts/.secrets-yumyum-testdata-backup-2026-08-25.json` (since `6f7e9f0`, 25 Aug; the 28 Aug `.gitignore` fix doesn't cover files that were already tracked) and **`restaurant.db`**.

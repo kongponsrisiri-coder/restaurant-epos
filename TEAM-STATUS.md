@@ -591,6 +591,9 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
+### ✅ Wed 23 Sep — RUMWONG QR link hub SHIPPED (Maya; Korakot: "rumwong want a qr code that take the customers to them page that contain Menu, FB, IG, map, contact")
+**Live: https://rumwong-links.pages.dev** — Menu (their full printed-style menu, 103 dishes, searchable) · Book a Table (their Dojo) · Call · Find Us (their Maps pin) · Email · Website · FB/IG/TikTok · hours with a live open/closed badge (UK time). Phone-checked at 390 px under device emulation. **Why it matters:** their current table QR decodes to `qrcodedynamic.com/xixp45q`, a paid third-party redirect; if that subscription lapses, every printed code dies. Ours is on a Cloudflare project we control → **never delete `rumwong-links`**. Real diners reach ONLY real channels: no demo booking modal, no link to our not-yet-in-service ordering. **Print files:** `~/Documents/SiamEPOS-Docs/client-sites/rum-wong/links/print/` — `rumwong-qr.svg` (vector) · `rumwong-qr.png` · `Rumwong-QR-table-card-A5.pdf` + `.png`; QR verified by two decoders down to 120 px. Full notes in `rum-wong/notes.md`. **Open for Korakot:** (1) which email they want (`enquiries@rumwong.co.uk` as on their current QR, vs `rumwong@yahoo.co.uk`); (2) whether the code should be on their own domain (`rumwong.co.uk/qr`) — needs their web host to add a redirect before printing. — Maya
+
 ### 🎨 MAYA — SESSION WRAP Tue 22 → Wed 23 Sep (Korakot: "pack it up, i have to restart new session")
 **Read this first to resume Maya.** Everything below is verified live, not assumed.
 

@@ -591,6 +591,10 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
+### 💳 Great THAI Group uses SQUARE — Nick's view on Square as a payment partner (24 Sep)
+Korakot met Great THAI on 23 Sep: they take payments on Square and use Square partners for online ordering + self-order. **Nick: Square is a COMPETITOR, not a partner.** Square for Restaurants is a full till with online ordering, kiosk and KDS, and it doesn't pay us the kind of residual Teya does (0.074% of TPV). **Keep Teya/Tyl as the payment partners.** Build a "keep your Square card machine" integration (Square Terminal API; UK availability to be confirmed by Krit) **only if Great THAI's 6 doors actually need it to sign**. Qualify first: which Square products they use, their rates, and which partner apps. **Wedge = OpenTable + Quandoo + 4 delivery apps and no direct ordering, not payments.**
+
+
 ### ✅ Thu 24 Sep — SEPOS-BOOK-TENANT-001 + SEPOS-MAIL-CONTACT-001: HIDDEN WIDGET BOOKINGS + fake contact details in booking emails — FIXED + DEPLOYED (Krit)
 **✅ 11:17 deployed `d5fa76b` → all 12 tenant clouds verified on it by 11:20.** Regression test `test-booking-tenant.js` (passes on the fix, FAILS on the old code). Live check on Baan Siam: booking posted with restaurant_id='siamepos' landed under `baan-siam`, on the list; test booking #51 cancelled. All 20 misfiled rows already re-filed (below). Cloud-only — no desktop/APK release needed; local tills read the cloud list.
 Korakot's Baan Rao test booking (today 19:00, 2 covers) emailed "07700 000000 / 123 Test Street" and never reached the till.

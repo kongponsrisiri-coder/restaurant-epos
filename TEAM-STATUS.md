@@ -591,7 +591,8 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
-### 🔴 Thu 24 Sep — SEPOS-BOOK-TENANT-001 + SEPOS-MAIL-CONTACT-001: HIDDEN WIDGET BOOKINGS + fake contact details in booking emails (Krit) — ⛔ WAITING ON KORAKOT'S GO
+### ✅ Thu 24 Sep — SEPOS-BOOK-TENANT-001 + SEPOS-MAIL-CONTACT-001: HIDDEN WIDGET BOOKINGS + fake contact details in booking emails — FIXED + DEPLOYED (Krit)
+**✅ 11:17 deployed `d5fa76b` → all 12 tenant clouds verified on it by 11:20.** Regression test `test-booking-tenant.js` (passes on the fix, FAILS on the old code). Live check on Baan Siam: booking posted with restaurant_id='siamepos' landed under `baan-siam`, on the list; test booking #51 cancelled. All 20 misfiled rows already re-filed (below). Cloud-only — no desktop/APK release needed; local tills read the cloud list.
 Korakot's Baan Rao test booking (today 19:00, 2 covers) emailed "07700 000000 / 123 Test Street" and never reached the till.
 - **Hidden bookings:** `public/widget.js` defaults `restaurant_id` to `'siamepos'` when an embed has no `data-restaurant`; the server trusted it → booking saved under the wrong id = **not on the till, and skipped the venue's hours/limits.** Swept every tenant (counts only): **Yum Yum 18 hidden since 30 Aug — 1 UPCOMING: #121 Sat 26 Sep 18:45, 7 covers**; **Baan Rao 1 (#1 today 19:00)**; all others 0.
 - **Email:** `emailService.js` had the phone + address HARDCODED as test placeholders → **every venue's** confirmation + reminder emails since launch told guests to ring 07700 000000.

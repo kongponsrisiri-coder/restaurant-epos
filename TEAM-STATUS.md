@@ -591,6 +591,9 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
+### 🔐 Thu 24 Sep 17:35 — SEPOS-SOCIAL-SYSUSER-001 IN PROGRESS (Krit, Korakot: "all can be yours")
+Verified Mint's finding with debug_token: **all 3 page tokens + META_LL_TOKEN lose data access 7 Nov 2026 21:16 UTC** (one shared authorisation); META_USER_TOKEN dead since 17 Jul, unused. Plan: system user on the Siamepos portfolio → put its token in the **existing `META_LL_TOKEN` slot** + re-derive `META_PAGE_TOKEN_<SLUG>` → **zero script changes**, old values kept commented for rollback. Next Meta-scheduled post Fri 25 Sep 10:00 (native, unaffected). ⚠️ Mint: please don't touch `.infra-keys` or the pipe until this row closes. — Krit
+
 ### 🔴 FOR KRIT — SEPOS-SOCIAL-SYSUSER-001: move social posting off Korakot's personal account (Mint for Korakot, Thu 24 Sep ~17:2x · **deadline 7 Nov 2026**)
 Every page token in `.infra-keys` is derived from Korakot's personal profile → one restriction, hack or password change stops posting for EVERY client. Fix = a Meta **System User** on the Siamepos portfolio (`1307351988257066`), with pages + the SiamEPOS Social app assigned, and page tokens re-derived from it (store them under the same `META_PAGE_TOKEN_<SLUG>` names so no script changes are needed). **⏰ Hard date found by Mint:** `debug_token` on `META_PAGE_TOKEN_SIAMEPOS` = PAGE, never expires for posting, BUT **`data_access_expires_at` = 7 Nov 2026**. After that, reads fail → `meta-handoff.py` reconcile breaks (double-post risk, 18 Aug class), and the weekly report + Control Room insights go blank. Check the other tokens too. **Ticket + PDF:** `~/Documents/Claude/Projects/SiamEpos/SEPOS-SOCIAL-SYSUSER-001-Krit-Ticket.{md,pdf}`. **Korakot's own actions (no code):** add a 2nd full admin to the Siamepos portfolio + turn on 2FA on his profile. Mint changed nothing in the pipe.
 

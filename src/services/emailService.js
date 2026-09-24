@@ -3,8 +3,6 @@ const { getBrandTheme } = require('./brandTheme'); // SEPOS-EMAIL-BRAND-001 — 
 
 const RESTAURANT_NAME    = process.env.RESTAURANT_NAME  || 'SiamEPOS Restaurant';
 const RESTAURANT_EMAIL   = process.env.RESTAURANT_EMAIL || 'info@siamepos.co.uk';
-const RESTAURANT_PHONE   = '07700 000000';
-const RESTAURANT_ADDRESS = '123 Test Street, London, E1 1AA';
 const FROM_EMAIL         = 'noreply@siamepos.co.uk';
 
 // SEPOS-047j — escape customer-supplied fields (name, notes) before they go
@@ -35,6 +33,32 @@ function formatDate(dateStr) {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     });
   } catch { return String(dateStr); }
+}
+
+// SEPOS-MAIL-CONTACT-001 — the "contact us" block came from two hardcoded
+// placeholders ('07700 000000', '123 Test Street, London, E1 1AA'), so every
+// venue's booking + reminder emails told guests to ring a fake number (Baan
+// Rao, 24 Sep). Read the venue's own details from settings — the same keys the
+// printed receipt uses — and leave out any line the venue hasn't filled in.
+async function venueContact() {
+  const out = { phone: '', email: RESTAURANT_EMAIL, address: '' };
+  try {
+    const pool = require('../db/dbAdapter');
+    const r = await pool.query(`SELECT key, value FROM settings WHERE key IN ('company_phone','company_email','company_address')`);
+    const m = {}; for (const row of r.rows) m[row.key] = String(row.value || '').trim();
+    out.phone = m.company_phone || '';
+    out.email = m.company_email || RESTAURANT_EMAIL;
+    out.address = (m.company_address || '').replace(/\s*\n\s*/g, ', ');
+  } catch (e) { console.warn('[email] venue contact lookup failed:', e.message); }
+  return out;
+}
+
+function contactLines(c, { withAddress = true } = {}) {
+  return [
+    c.phone ? `📞 <strong>${escapeHtml(c.phone)}</strong>` : '',
+    c.email ? `📧 <strong>${escapeHtml(c.email)}</strong>` : '',
+    withAddress && c.address ? `📍 ${escapeHtml(c.address)}` : '',
+  ].filter(Boolean).join('<br>\n          ');
 }
 
 function formatTime(timeStr) {
@@ -153,6 +177,7 @@ async function sendBookingConfirmation(reservation) {
   const notes  = escapeHtml(reservation.notes || '—');
   const ref    = reservation.id;
   const th     = await getBrandTheme(); // restaurant's own brand colours
+  const contact = contactLines(await venueContact());
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e0e0e0">
@@ -178,9 +203,7 @@ async function sendBookingConfirmation(reservation) {
         <p style="color:#555;font-size:15px">We look forward to welcoming you!</p>
         <p style="color:#555;font-size:14px">
           To cancel or amend your booking please contact us:<br><br>
-          📞 <strong>${RESTAURANT_PHONE}</strong><br>
-          📧 <strong>${RESTAURANT_EMAIL}</strong><br>
-          📍 ${RESTAURANT_ADDRESS}
+          ${contact}
         </p>
       </div>
 
@@ -206,6 +229,7 @@ async function sendReminderEmail(reservation) {
   const name   = escapeHtml(reservation.customer_name);
   const covers = reservation.covers;
   const th     = await getBrandTheme(); // restaurant's own brand colours
+  const contact = contactLines(await venueContact(), { withAddress: false });
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e0e0e0">
@@ -227,8 +251,7 @@ async function sendReminderEmail(reservation) {
 
         <p style="color:#555;font-size:14px">
           Need to cancel or amend? Please contact us:<br><br>
-          📞 <strong>${RESTAURANT_PHONE}</strong><br>
-          📧 <strong>${RESTAURANT_EMAIL}</strong>
+          ${contact}
         </p>
       </div>
 

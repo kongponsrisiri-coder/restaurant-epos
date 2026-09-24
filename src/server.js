@@ -4729,7 +4729,7 @@ app.post('/api/sync/sell-voucher', async (req, res) => {
       [code, amt, b.recipient_name || null, b.recipient_email || null,
        b.sender_name || null, b.message || null, b.delivery_date || null,
        b.expires_at || voucherSvc.defaultExpiryDate(), method,
-       b.restaurant_id || process.env.RESTAURANT_ID || 'siamepos'],
+       resolveRestaurantId(req)], // SEPOS-BOOK-TENANT-001
     );
     res.json({ ok: true, created: r.rows.length > 0, alreadyExists: r.rows.length === 0 });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -6176,7 +6176,9 @@ async function durationForCovers(restaurant_id, covers) {
 app.get('/api/reservations/availability', widgetCors, async (req, res) => {
   try {
     const { date, covers = 2 } = req.query;
-    const restaurant_id = req.query.restaurant_id || process.env.RESTAURANT_ID || 'siamepos';
+    // SEPOS-BOOK-TENANT-001 — never trust the widget's restaurant_id on a
+    // single-venue server: an embed without data-restaurant sent 'siamepos'.
+    const restaurant_id = resolveRestaurantId(req);
     if (!date) return res.status(400).json({ error: 'date is required (YYYY-MM-DD)' });
     const coversNum = parseInt(covers, 10);
     if (isNaN(coversNum) || coversNum < 1) return res.status(400).json({ error: 'covers must be a positive number' });
@@ -6401,7 +6403,7 @@ app.get('/api/reservations/settings/:restaurantId', widgetCors, async (req, res)
 app.get('/api/reservations', async (req, res) => {
   try {
     const { date, status } = req.query;
-    const restaurant_id = req.query.restaurant_id || process.env.RESTAURANT_ID || 'siamepos';
+    const restaurant_id = resolveRestaurantId(req); // SEPOS-BOOK-TENANT-001
     let query = `SELECT r.*, TO_CHAR(r.reservation_date, 'YYYY-MM-DD') AS reservation_date, TO_CHAR(r.reservation_time, 'HH24:MI') AS reservation_time, t.name AS table_name FROM reservations r LEFT JOIN tables t ON r.table_id = t.id WHERE r.restaurant_id = $1`;
     const params = [restaurant_id];
     if (date) { params.push(date); query += ` AND r.reservation_date = $${params.length}`; }
@@ -6463,7 +6465,10 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
     // 'confirmed'; a booking that names its status (the staff form) is
     // honoured unchanged.
     const status = statusInput || ((source === 'widget' || source === 'online') ? 'confirmed' : 'pending');
-    const restaurant_id = req.body.restaurant_id || process.env.RESTAURANT_ID || 'siamepos';
+    // SEPOS-BOOK-TENANT-001 — a widget embed without data-restaurant posted
+    // 'siamepos', so the booking saved under the wrong id: invisible on the
+    // till and skipping this venue's hours/limits (Yum Yum 18, Baan Rao 1).
+    const restaurant_id = resolveRestaurantId(req);
     if (!customer_name?.trim()) return res.status(400).json({ error: 'Guest name is required' });
     if (!customer_phone?.trim()) return res.status(400).json({ error: 'Phone number is required' });
     if (!reservation_date) return res.status(400).json({ error: 'Date is required' });
@@ -6728,7 +6733,7 @@ app.post('/api/reservations/walk-in', async (req, res) => {
       customer_name = 'Walk-in', customer_phone = null, customer_email = null,
       staff_id = null, notes = null,
     } = req.body || {};
-    const restaurant_id = (req.body || {}).restaurant_id || process.env.RESTAURANT_ID || 'siamepos';
+    const restaurant_id = resolveRestaurantId(req); // SEPOS-BOOK-TENANT-001
     if (!table_id) return res.status(400).json({ error: 'table_id required' });
     const coversNum = parseInt(covers, 10);
     if (!coversNum || coversNum < 1) return res.status(400).json({ error: 'covers must be at least 1' });

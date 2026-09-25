@@ -210,6 +210,7 @@ Korakot approves posts visually in **Control Room → Social tab → 📋 Approv
 **Also permanent from 2026-08-09: "similar post already this week" is a DROP, not a re-draft.** When a post is denied as a duplicate, bin it and free the slot — do not resubmit a `-v2`. Check the week's queued topics for overlap **before** drafting, especially when a Control-Room planning run may have queued its own batch.
 
 ## HARD RULES
+- **Owners do NOT approve posts (Korakot, 25 Sep; SEPOS-SOCIAL-CLIENT-001 re-scoped by Krit).** Korakot approves on the Control Room board as before. Owners only SEE performance in the read-only **Social tab** of their back office (group app; pilot Thann Thai). No emails or invites to clients about it until Korakot says.
 - **Approval before posting. Always.** A wrong post on a client's page is a fired service.
 - **No customer/diner data ever** in posts or AI context (people's names, order details). The client's own business info (menu, prices, offers) is fine.
 - **Never let a client page go 7+ days silent** — that's the product failing. If blocked on approval, chase Korakot.

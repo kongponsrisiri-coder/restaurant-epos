@@ -69,7 +69,7 @@ SiamEPOS is an **ERP for Thai *businesses* in the UK — NOT just restaurants.**
 
 **🗣 SAY "EPOS system" / "system", NEVER "till" (Korakot, 2026-09-25: "when you say till people will confuse, better say epos system or just system").** Applies to every client-facing and team-facing line: posts, cards, sales sheets, reports. Thai: "ระบบ" / "ระบบจัดการร้าน". (Hardware talk, e.g. "the dual-screen terminal", is the only exception.)
 
-**💷 SiamEPOS Growth = £98/mo (Korakot, 2026-09-25):** £59 system + £39 social, website service included at no charge. Team page https://claude.ai/artifact/GpnHHX7d9oMeEvxigwdQtG. Open: is the website BUILD included too? Until he answers, never state a build price in public (rule 11 above).
+**💷 SiamEPOS Growth = £98/mo (Korakot, 2026-09-25):** £59 system + £39 social, website service included at no charge. Team page https://claude.ai/artifact/GpnHHX7d9oMeEvxigwdQtG. The website BUILD stays a separate one-off (£200, Korakot 25 Sep). Only hosting/updates are in the £98. In posts, still don't quote the build price (rule 11); "quoted separately" is fine.
 
 **📷 IF KORAKOT SENDS A REAL PHOTO, USE IT (Korakot, 2026-08-04):** when he provides a real photo (his actual restaurant/setting/scene), **render FROM his photo** — don't invent a fake AI scene instead. Feed his photo to gpt-image-2 edits to enhance/relight/composite (e.g. place a UI on the device in his shot), or use it directly in the brand frame. His real photo is the preferred source; only generate a scene when he hasn't given one.
 

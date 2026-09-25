@@ -253,6 +253,26 @@ if (process.env.CLIENT_DIST_PATH) {
 // X-Restaurant-Id header. Endpoint queries get scoped by restaurant_id
 // in Phase 2b; for now resolveRestaurantId tags newly-created rows.
 const MULTI_TENANT = process.env.MULTI_TENANT === '1';
+// SEPOS-RESV-DATE-001 — a reservation row straight from pg carries
+// reservation_date as a JS Date at the server's local midnight. With TZ=Europe/London
+// that serialises as "2026-09-24T23:00:00.000Z" for the 25th, so every screen that
+// merges a pushed row (socket reservation_updated / new_reservation) filed the
+// booking under the PREVIOUS day — it vanished after a move (Baan Rao, 25 Sep), and
+// a later edit from that view really moved it back a day. Every reservation that
+// leaves the server goes through this: 'YYYY-MM-DD' + 'HH:MM', like GET's TO_CHAR.
+function resvOut(r) {
+  if (!r) return r;
+  const d = r.reservation_date;
+  let ymd = d;
+  if (d instanceof Date) {
+    ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  } else if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}/.test(d)) {
+    ymd = d.slice(0, 10);
+  }
+  const t = r.reservation_time;
+  return { ...r, reservation_date: ymd, reservation_time: t == null ? t : String(t).slice(0, 5) };
+}
+
 function resolveRestaurantId(req) {
   if (!MULTI_TENANT) return process.env.RESTAURANT_ID || 'siamepos';
   return (
@@ -2479,7 +2499,7 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
              WHERE id=$1 RETURNING *`,
             [seated.rows[0].id]
           );
-          if (completeRes.rows[0]) io.emit('reservation_updated', completeRes.rows[0]);
+          if (completeRes.rows[0]) io.emit('reservation_updated', resvOut(completeRes.rows[0]));
         }
       } catch (err) {
         console.warn('[pay] auto-complete reservation skipped:', err.message);
@@ -6626,20 +6646,20 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
         [bKey, bday]
       ).catch(e => console.warn('[birthday] profile upsert skipped:', e.message));
     }
-    io.emit('new_reservation', { ...reservation, reservation_date: String(reservation.reservation_date).split('T')[0], reservation_time: String(reservation.reservation_time).slice(0, 5) });
+    io.emit('new_reservation', resvOut(reservation));
     if (customer_email) sendBookingConfirmation(reservation).catch(err => console.error('❌ Email error:', err.message));
     // SEPOS-OWNER-ALERT-001 — backup email to the restaurant (fire-and-forget)
     sendRestaurantAlert(
-      `New booking · ${String(reservation.reservation_date).split('T')[0]} ${String(reservation.reservation_time).slice(0, 5)} · ${reservation.covers} guests`,
+      `New booking · ${resvOut(reservation).reservation_date} ${String(reservation.reservation_time).slice(0, 5)} · ${reservation.covers} guests`,
       `<p><b>New booking</b></p>
        <p>${String(reservation.customer_name || '').replace(/[<>]/g,'')} · ${String(reservation.customer_phone || '').replace(/[<>]/g,'')}</p>
-       <p style="font-size:18px;"><b>${String(reservation.reservation_date).split('T')[0]} at ${String(reservation.reservation_time).slice(0, 5)}</b> · ${reservation.covers} guests</p>
+       <p style="font-size:18px;"><b>${resvOut(reservation).reservation_date} at ${String(reservation.reservation_time).slice(0, 5)}</b> · ${reservation.covers} guests</p>
        ${reservation.notes ? `<p>Notes: ${String(reservation.notes).replace(/[<>]/g,'')}</p>` : ''}`
     ).catch(() => {});
     if (customer_phone) sendBookingSms(reservation).catch(() => {});
     console.log(`📅 New booking [${source}]: ${customer_name} ×${coversNum} on ${reservation_date} at ${reservation_time}`);
     if (process.env.MAKE_BOOKING_WEBHOOK) {
-      const webhookData = JSON.stringify({ booking_id: reservation.id, customer_name: reservation.customer_name, customer_email: reservation.customer_email || null, customer_phone: reservation.customer_phone || null, covers: reservation.covers, reservation_date: String(reservation.reservation_date).split('T')[0], reservation_time: String(reservation.reservation_time).slice(0, 5), source: reservation.source, restaurant_name: process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant', restaurant_email: process.env.RESTAURANT_EMAIL || null });
+      const webhookData = JSON.stringify({ booking_id: reservation.id, customer_name: reservation.customer_name, customer_email: reservation.customer_email || null, customer_phone: reservation.customer_phone || null, covers: reservation.covers, reservation_date: resvOut(reservation).reservation_date, reservation_time: String(reservation.reservation_time).slice(0, 5), source: reservation.source, restaurant_name: process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant', restaurant_email: process.env.RESTAURANT_EMAIL || null });
       const webhookHttps = require('https');
       const webhookUrl = new URL(process.env.MAKE_BOOKING_WEBHOOK);
       const webhookReq = webhookHttps.request({ hostname: webhookUrl.hostname, path: webhookUrl.pathname + webhookUrl.search, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(webhookData) } });
@@ -6647,7 +6667,7 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
       webhookReq.write(webhookData);
       webhookReq.end();
     }
-    res.status(201).json({ success: true, booking_id: reservation.id, message: 'Booking received!', reservation: { id: reservation.id, customer_name: reservation.customer_name, covers: reservation.covers, reservation_date: String(reservation.reservation_date).split('T')[0], reservation_time: String(reservation.reservation_time).slice(0, 5), status: reservation.status } });
+    res.status(201).json({ success: true, booking_id: reservation.id, message: 'Booking received!', reservation: { id: reservation.id, customer_name: reservation.customer_name, covers: reservation.covers, reservation_date: resvOut(reservation).reservation_date, reservation_time: resvOut(reservation).reservation_time, status: reservation.status } });
   } catch (err) { console.error('POST /api/reservations error:', err); res.status(500).json({ error: 'Something went wrong. Please try again.' }); }
 });
 
@@ -6679,8 +6699,8 @@ app.put('/api/reservations/:id', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Reservation not found' });
     }
-    io.emit('reservation_updated', result.rows[0]);
-    res.json(result.rows[0]);
+    io.emit('reservation_updated', resvOut(result.rows[0]));
+    res.json(resvOut(result.rows[0]));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -6716,8 +6736,8 @@ app.post('/api/reservations/:id/seat', async (req, res) => {
         order = o;
       }
     }
-    io.emit('reservation_updated', reservation);
-    res.json({ reservation, order });
+    io.emit('reservation_updated', resvOut(reservation));
+    res.json({ reservation: resvOut(reservation), order });
   } catch (err) {
     console.error('POST /api/reservations/:id/seat error:', err);
     res.status(500).json({ error: err.message });
@@ -6764,9 +6784,9 @@ app.post('/api/reservations/walk-in', async (req, res) => {
 
     await pool.query("UPDATE tables SET status='occupied' WHERE id=$1", [table_id]);
 
-    io.emit('new_reservation', reservation);
+    io.emit('new_reservation', resvOut(reservation));
     io.emit('tableStatusChanged', { id: table_id, status: 'occupied' });
-    res.json({ reservation, order });
+    res.json({ reservation: resvOut(reservation), order });
   } catch (err) {
     console.error('POST /api/reservations/walk-in error:', err);
     res.status(500).json({ error: err.message });

@@ -591,6 +591,9 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
+### 🏢 Fri 25 Sep ~21:20 — SEPOS-GROUP-002 IN PROGRESS: Loyalty tab + SPA edition of the owner back office (Krit, Korakot: "do both, I can wait")
+Decided with Korakot: the **loyalty app STAYS** (staff scanner/stamping at the till, customer join page, wallet cards, reward emails, rule setup); the back office gets a **READ-ONLY Loyalty tab** (members, joins, stamps, rewards earned/used, top regulars, rules + "contact SiamEPOS"). Then a **spa edition** of the same back office (Overview takings, Today by therapist, Bills, Vouchers, Social, Status) from the spa's existing sync feeds; spa Loyalty needs one small read-only feed in the spa code (Sam's repo — branch + deliberate after-hours deploy). Demo data = spa DEMO tenant, not Highbury/Jinta live data. — Krit
+
 ### 🎞 Fri 25 Sep — REEL STUDIO built + video-use installed (Mint; Korakot: "ok, do it… if you can make an app… build it at once")
 **Open:** double-click `~/Desktop/Reel Studio.command` → http://127.0.0.1:3045. Phone clips → brief → AI plan (approve / notes) → cut, graded, Thai-subtitled vertical reel → revise → save to the client's social folder. **Installed:** the open-source `video-use` skill (Browser Use, MIT) at `~/Developer/video-use` (+ `~/.claude/skills/video-use`), `uv` + its own Python 3.14 venv, and **`ffmpeg-full`** (Homebrew, keg-only, alongside the normal ffmpeg; the normal build has no subtitle support, and I found that before a reel failed on it). Thai subtitle render test ✅. App tested end to end, apart from the AI run itself. **⛔ Waiting on Korakot: an ElevenLabs API key** (paste it in the app, top right: "Add ElevenLabs key"), then a 30–60 s test clip. Posting stays manual (Business Suite + trending sound) until SEPOS-SOCIAL-CLIENT-001 handles video. 📨 Krit: FYI, local tool only; nothing touched in the pipe.
 

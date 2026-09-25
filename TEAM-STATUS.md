@@ -591,7 +591,8 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
-### 🔴 Fri 25 Sep ~15:30 — SEPOS-RESV-DATE-001: moved bookings VANISH from the day view (Krit) — fix on branch — ✅ Korakot's go: deploy TONIGHT after service (Krit scheduled 23:17 in-session; if the session is closed, the next Krit session must deploy it)
+### ✅ Fri 25 Sep — SEPOS-RESV-DATE-001: moved bookings VANISHED from the day view — FIXED + DEPLOYED (Krit)
+**15:29 deployed `1f9b72d`** (Korakot: "do it now" — before dinner service) → all 13 clouds verified on it. Live check on Baan Siam: booking #52 created + moved to another table → reply `2026-09-30` / `18:00`, still in that day's list; cancelled. Cloud-only, reservations code only (no sales/orders/print/sync).
 Korakot at Baan Rao: "assign the booking and when I move it the booking has gone". **Data is safe** (all 5 Baan Rao bookings on the cloud, moves saved). Cause: clouds run `TZ=Europe/London`; a reservation row pushed over the socket (`reservation_updated` / `new_reservation`) carries the pg DATE as `2026-09-24T23:00:00Z` for the 25th → the Reservations/Plan views (`startsWith(filterDate)`) file it under YESTERDAY → it vanishes until refresh. ⚠️ Worse: editing it from yesterday's view sends that timestamp back → the booking REALLY moves a day. Same bug made the owner 'New booking' alert email + Make webhook read "Fri Sep 25 2026 00:00:00 GM". Affects every cloud-mode reservations screen on every tenant; local tills (SQLite strings) unaffected. **Fix `0e5e887` on branch `fix/resv-date-out`:** one `resvOut()` for every reservation leaving the server (5 emits + responses + alert + webhook + widget reply). Tested under TZ=Europe/London + booking regression test. Cloud-only deploy. **Workaround until deployed: refresh after moving a booking; never edit a booking shown under yesterday.** — Krit
 
 ### ✅ Thu 24 Sep — THANN THAI: photo stock topped up + QR link page LIVE (Maya; Korakot)

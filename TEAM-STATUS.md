@@ -593,6 +593,25 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
+### 🗺 Sat 26 Sep — PRODUCT MAP v2 (Nick; Korakot: "update our product line up") · 📨 Korakot / Maya / Mint
+Same link: https://claude.ai/artifact/FJLShHutJYPqNeaHZ6nYpf. Krit's page kept intact. **Added:**
+- a **Hardware** section: till £600 · printer £50 · iPad package £250 · what we don't supply · batch-2 stock note (all 4 printers go to Rumwong if it accepts)
+- restaurant **terms**: £0 set-up, no contract, billing starts at go-live
+- a **Growth bundle** line in the price list ("being re-set")
+- a **Not for sale yet** list: Teya/Tyl card machines, the Square link, menu service, accountant login
+- Nick's **recommendations** under Open decisions
+
+NICK.md price table rebuilt the same way; the dead Starter/Pro/Growth tiers are gone.
+**📨 KORAKOT decides:**
+1. **Growth bundle.** Nick recommends **£138** Founder's / £168 standard: system + social at their own prices, with hosting and the £59 social set-up free. That means ONE bundle rule, so drop the public "£10 off".
+2. **Current social clients.** Nick: keep their current terms until the term ends, then give notice.
+3. **Per-branch price for groups.** Nick: normal subscription per branch, back office included for 2+.
+4. **Single-screen till sell price.** It costs us the same as the dual-screen.
+
+**📨 MAYA:** 🔴 **siamepos.co.uk/social is LIVE with £39/month and "£10/month off with any plan"** (checked against the live site 26 Sep). Update it once Korakot sets the bundle price (manual deploy).
+**📨 MINT:** the Growth launch post on **Tue 29 Sep 11:00** must not quote £98 or £39. Check it before it fires.
+
+
 ### 📰 Sat 26 Sep — NEWS: Thailand floods (Mint; Korakot: "i need a post about flooding in Thailand right now")
 `siamepos-2026-09-news-thai-floods` PENDING, proposed **today 17:00** (figures move fast). Written as supportive + useful, NOT tragedy-for-engagement (the news-strand rule): DDPM 26 Sep 07:00: 21 provinces, 84,605 people, water still rising in Suphan Buri / Chachoengsao / Sa Kaeo · Bangkok widened its disaster declaration from 3 districts to all 50 (Thairath, Bangkok Biz News, Thai Post, Spring) · TMD: heavy rain through Sun 27 Sep · hotlines 1784 (DDPM, 24 h) + 1555 (BMA) · airports open, allow extra time, use rail, check the airline (CAAT) · donate via official channels only, beware scam pages. Photo: CC0 doorstep shot, Nakhon Sawan 25 Sep (Philsacor / Wikimedia Commons), no people. No promo line, no #SiamEPOS. Not claimed: UK FCDO (their page doesn't mention the floods) or a "3 hours at Suvarnabhumi" rule (only one source).
 **v2 (Korakot: "i have no idea what the photo is"):** the only reusable photo (a CC0 night shot) didn't read as a flood → replaced with OUR map: Thailand with the 21 affected provinces from the official DDPM list (via PRD), rising 3 highlighted, Bangkok marked; hotlines + flight tip on the card. Caption now lists all 21 provinces by trend + 1 death, credits "แผนที่: SiamEPOS จากรายงาน ปภ.". `siamepos-2026-09-news-thai-floods-v2` PENDING 17:00; v1 retired.

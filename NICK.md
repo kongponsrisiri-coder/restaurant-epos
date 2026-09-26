@@ -264,12 +264,21 @@ SiamEPOS™ UK00004385501
 
 ## PRICING
 
-| Plan | Price | Includes |
-|------|-------|---------|
-| Starter | £49/month | Full EPOS, KDS, bar, offline, desktop app, AI menu scanner, allergens, VAT, printers |
-| Professional | £89/month | Above + booking widget + reservations + takeaway widget + Stripe + CRM database |
-| Growth | £179/month | Above + email campaigns + Make.com + AI inventory + wastage + staff performance + MTD |
-| Counter (proposed) | £29/month | Simple till for grab-and-go, no floor plan/reservations |
+> **CANONICAL price list = the Product Map** https://claude.ai/artifact/FJLShHutJYPqNeaHZ6nYpf
+> (Krit published it 26 Sep 2026; Nick added hardware, terms, not-for-sale-yet and open decisions the same day). **Check it before quoting.**
+> The old Starter £49 / Professional £89 / Growth £179 / Counter £29 tiers are DEAD. There is one system price.
+
+| Product | Price (26 Sep 2026) |
+|------|-------|
+| Restaurant management system | £89/mo · **Founder's Rate £59/mo** (first 50, locked for life) · £0 set-up · no contract · starts at go-live |
+| Growth bundle (system + social + website hosting) | **BEING RE-SET.** Was £98 (£59 + £39). Nick recommends **£138** (£168 standard). Don't quote until Korakot sets it |
+| Social media service | **£79/mo** (was £39 until 26 Sep) · £59 set-up, free with the system · 3-month minimum |
+| Website | £200 one-off build + £5/mo hosting (Rumwong + Cha & Pinto quoted £199 — honour) |
+| SiamEPOS Spa | £49/mo |
+| SiamShop | £89/mo (first quote: Cha & Pinto Box, Q-2026-002) |
+| SiamPay | 1.5% + 30p per UK card; our share 10p per payment |
+| Hardware | Dual-screen till £600 · 80 mm printer £50 (was £40 until 22 Sep) · iPad + printer package £250 · single-screen till: no price yet |
+| Owner back office · Loyalty | Not set. Nick: include the back office for groups of 2+ branches |
 
 ### Additional Revenue
 - **Setup / installation fee: £0 — NONE. Deliberate policy (Korakot, 19 Aug 2026).**
@@ -288,7 +297,7 @@ SiamEPOS™ UK00004385501
   Same £5/mo to take over a site the client already has.
   *(Korakot's call 2026-07-20 — supersedes the old £199 one-off and the
   £299/£499/£799 Starter/Full/Premium tiers, both now dead.)*
-- Social Media Service: £39/month managed (Facebook + Instagram)
+- Social Media Service: **£79/month** managed (Facebook + Instagram) — raised from £39 on 26 Sep 2026
 
 ### Key Metrics
 - Blended ARPU: ~£105/month (Year 1), ~£120/month (Year 2)

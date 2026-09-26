@@ -92,6 +92,17 @@ SiamEPOS is an **ERP for Thai *businesses* in the UK — NOT just restaurants.**
 3. **Link every post to the restaurant** — the season/occasion is the hook, the table is the answer, the CTA is call/Messenger.
 4. Verify every date (clocks change, festivals, half-term) against a calendar before writing it.
 
+## 🏛 PREMIUM POSTER PATTERN for client pages (Korakot, 26 Sep, from 2 Raitakrai posts he liked)
+Template: `social/reel-factory/templates/poster-premium.html` (first use: `social/thann-thai/2026-09/poster/`). Seven moves:
+1. **Logo big and centred at the top** (the lockup is the crown).
+2. **One moody, warm hero photo**, dark gradient top and bottom; the photo does the selling.
+3. **3-tier headline**: spaced-caps eyebrow → big gold-gradient serif → spaced caps with the **TOWN NAME** ("IN WEYBRIDGE").
+4. **1–2 lines** of description max.
+5. **Service icons** (Dine in · Takeaway · Delivery): only the ones that are TRUE (FACTS.md).
+6. **Info footer ON the image**: address · phone · gold pill CTA, so no caption is needed to act.
+7. Finishing: thin gold rules, one script accent (their sign-off), a spaced vertical tagline in a corner.
+Guardrails: real photos only (their posts look AI-edited, which we don't copy); the CTA must be true ("CALL TO BOOK" until online booking/ordering is live on their site); gold-gradient serif is Latin-only, and Thai never goes in gradient text (rule 11).
+
 ## 🤝 CLIENT ONBOARDING — adding a new social client's Facebook Page
 **Full runbook: `~/Documents/SiamEPOS-Docs/manuals/SiamEPOS-Social-Client-Onboarding-Runbook.md` (+ .pdf).** The short version:
 

@@ -74,9 +74,17 @@ async function snapshotAll() {
   const clients = await pool.query(
     `SELECT id, restaurant_name, place_id, metadata FROM clients WHERE status NOT IN ('churned', 'archived') OR status IS NULL`
   );
-  let done = 0, skipped = 0;
+  let done = 0, skipped = 0, fresh = 0;
   for (const c of clients.rows) {
     try {
+      // SEPOS-REVIEWS-ONCE-A-DAY — the sweep also runs 90 s after every boot, and this
+      // service redeploys on every push to main (~10×/day), so clients were being
+      // snapshotted ~10×/day (≈420 paid Place Details calls per client in 44 days).
+      // Skip anyone already snapshotted in the last 20 h; the manual ↻ Refresh
+      // (snapshotClient via the route) is not affected.
+      const recent = await pool.query(
+        `SELECT 1 FROM reviews_snapshots WHERE client_id = $1 AND fetched_at > NOW() - INTERVAL '20 hours' LIMIT 1`, [c.id]);
+      if (recent.rows.length) { fresh++; continue; }
       const r = await snapshotClient(c);
       r.skipped ? skipped++ : done++;
     } catch (e) {
@@ -84,8 +92,8 @@ async function snapshotAll() {
       console.warn(`[reviews] snapshot ${c.restaurant_name}:`, e.message);
     }
   }
-  console.log(`[reviews] daily sweep: ${done} snapshotted, ${skipped} skipped`);
-  return { done, skipped };
+  console.log(`[reviews] daily sweep: ${done} snapshotted, ${fresh} already fresh (<20h), ${skipped} skipped`);
+  return { done, skipped, fresh };
 }
 
 // 24h cadence, first run 90s after boot so deploys don't stampede the API.

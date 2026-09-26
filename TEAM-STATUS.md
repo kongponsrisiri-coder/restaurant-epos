@@ -593,6 +593,20 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
+### 📨 FOR MAYA — MAYA-SITE-PRICING-SYNC-001: bring siamepos.co.uk in line with the 26 Sep prices · 🔴 live before Tue 29 Sep 11:00 (Nick)
+**Full brief:** `~/Documents/Claude/Projects/SiamEpos/MAYA-SITE-PRICING-SYNC-001.md` (+ .pdf). It has exact before → after text, EN + TH, for **7 pages**. It **supersedes the partial lists in the two rows below.**
+- `social` (£39 → £79, "£10 off" → Growth £138)
+- `website-design`, `pricing`, `faq` incl. JSON-LD, `features`, `index` (the £5 is UPKEEP, hosting is the client's own cost)
+- `install` (still charges a £49 install, £499+ websites and "Ongoing Care £49/mo" → free / £200 / £5)
+
+Then do one manual deploy (`--no-build`), verify on the live site, and regenerate the stale sales rate card.
+**⏳ Needs 4 answers from Korakot first** (each has Nick's default; "go with defaults" is enough):
+- D1: is the domain also the client's cost?
+- D2: publish Growth £138 on the social page?
+- D3: keep or retire SiamLite (£29/£39/£49; not on the Product Map)?
+- D4: add "or we supply a tested printer for £50" to the "under £30" printer FAQ?
+
+
 ### 💷 Sat 26 Sep — DECISION: the £5/mo is the WEBSITE UPKEEP service; WEBSITE HOSTING IS THE CLIENT'S OWN COST (Korakot: "Website hosting, its client cost, that £5 is website upkeep service")
 So Growth £138 = £59 system + £79 social, **with the £5 upkeep free**. Hosting is not included. **Fixed by Nick** everywhere we control:
 - the product map (v5) and the Growth page (v7), with the card re-rendered: "website upkeep included"

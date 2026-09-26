@@ -1,6 +1,7 @@
 // SEPOS-REVIEWS-001 — client review data for the ops UI.
 //   GET  /api/reviews/clients/:id           latest snapshot + 90-day series
 //   POST /api/reviews/clients/:id/refresh   snapshot now (finds place_id first time)
+//   GET  /api/reviews/clients/:id/archive   every review any snapshot ever held, newest first
 
 const express = require('express');
 const { pool } = require('../db/pool');
@@ -26,6 +27,21 @@ router.get('/clients/:id', async (req, res) => {
       place_id: c.rows[0]?.place_id || null,
       latest: latest.rows[0] || null,
       series: series.rows,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-REVIEWS-ARCHIVE-001 — read-only; works from stored snapshots, no Google call.
+router.get('/clients/:id/archive', async (req, res) => {
+  try {
+    const rows = await pool.query(
+      `SELECT reviews, fetched_at FROM reviews_snapshots
+        WHERE client_id = $1 AND fetched_at > NOW() - INTERVAL '400 days'
+        ORDER BY fetched_at ASC`, [req.params.id]);
+    res.json({
+      reviews: gr.mergeArchive(rows.rows),
+      snapshots: rows.rows.length,
+      since: rows.rows[0]?.fetched_at || null,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

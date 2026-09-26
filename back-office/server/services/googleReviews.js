@@ -96,4 +96,32 @@ function start() {
   console.log('[reviews] daily Google-review snapshots armed');
 }
 
-module.exports = { enabled, snapshotClient, snapshotAll, start };
+// SEPOS-REVIEWS-ARCHIVE-001 — every review Google has ever shown us, in one list.
+// The API only hands us the 5 reviews Google picks as "most relevant" per call
+// (Places API New has no newest-first, and the legacy reviews_sort=newest is not
+// enabled for our project), so each daily snapshot holds a slightly different
+// five. Merging all snapshots keeps anything that ever appeared, newest first,
+// with the day we first saw it. It is still NOT every review — Google never
+// sends the rest — so the UI links to Google for the full list.
+function reviewKey(rv) {
+  // Same reviewer + same publish time = same review, even if the text was edited.
+  return rv.time ? `${rv.author || ''}|${rv.time}` : `${rv.author || ''}|${rv.rating ?? ''}|${String(rv.text || '').slice(0, 80)}`;
+}
+
+// rows: [{ reviews: JSON string | array, fetched_at }] ordered oldest → newest.
+function mergeArchive(rows) {
+  const seen = new Map();
+  for (const row of rows || []) {
+    let list = row.reviews;
+    if (typeof list === 'string') { try { list = JSON.parse(list); } catch { list = []; } }
+    for (const rv of Array.isArray(list) ? list : []) {
+      const k = reviewKey(rv);
+      const prev = seen.get(k);
+      if (prev) prev.last_seen = row.fetched_at;
+      else seen.set(k, { ...rv, first_seen: row.fetched_at, last_seen: row.fetched_at });
+    }
+  }
+  return [...seen.values()].sort((a, b) => String(b.time || '').localeCompare(String(a.time || '')));
+}
+
+module.exports = { enabled, snapshotClient, snapshotAll, start, mergeArchive };

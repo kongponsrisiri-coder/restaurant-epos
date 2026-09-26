@@ -160,13 +160,12 @@ Against a **typical rented EPOS** (always generic — never name a brand with a 
 
 | Plan | Price | Key Benefit |
 |------|-------|------------|
-| Starter | £49/month | Full restaurant system — starts here |
-| Professional | £89/month | + Zero-commission bookings + takeaway |
-| Growth | £179/month | + AI inventory + profit intelligence |
-| **Founder's Rate** | **£59/month** | Professional, early-client price — the offer to lead with |
+| Restaurant management system | £89/month | ONE system price. The old Starter £49 / Pro £89 / Growth £179 tiers are DEAD (Nick, 26 Sep; canonical list = https://claude.ai/artifact/FJLShHutJYPqNeaHZ6nYpf) |
+| **Founder's Rate** | **£59/month** | First 50 restaurants, locked for life — the offer to lead with |
+| **Growth bundle** | **£138/month** | System + social, with website hosting and the social set-up free (Korakot, 26 Sep). £168 on the standard £89. The only bundle |
 | Website Service | £5/month | Website + hosting + their own domain, wired to the till |
 | Website design (one-off) | **£200** | The build itself — PUBLIC on siamepos.co.uk since 2026-09-14 (Korakot). Supersedes "quoted case by case". |
-| Social Media Service | £39/month | 8–12 FB+IG posts/mo, £59 setup (waived with EPOS), 3-mo min, −£10/mo bundled |
+| Social Media Service | £79/month | 8–12 FB+IG posts/mo, £59 setup (waived with the system), 3-mo min. Was £39 until 26 Sep; the "−£10/mo bundled" offer is replaced by the Growth bundle |
 
 ### ⛔ NO FREE TRIAL — discontinued 2026-07-17 (Korakot)
 The 30-day free trial no longer exists. **Never quote it.** Lead with the

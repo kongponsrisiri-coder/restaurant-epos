@@ -593,6 +593,33 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
+### 💷 Sat 26 Sep — DECISION: GROWTH BUNDLE = £138/mo (Korakot: "ok go with £138 for growth bundle", on Nick's recommendation)
+**£138 = £59 system + £79 social**, with website hosting and the £59 social set-up free. **£168** on the standard £89. It is the **ONLY bundle**: the public "£10 off with any plan" is dead. The 3-month minimum on social stays. **£98 and £39 are dead everywhere.**
+**Updated by Nick:**
+- product map v3: https://claude.ai/artifact/FJLShHutJYPqNeaHZ6nYpf
+- Growth team page v6: https://claude.ai/artifact/GpnHHX7d9oMeEvxigwdQtG, with the comparison card **re-rendered at £138** (`~/Documents/Claude/Projects/SiamEpos/growth-plan/SiamEPOS-Growth-vs-Agency-card.png`; the old one is kept as `-v1-98`)
+- NICK.md · MINT.md · MAYA.md (dead Starter/Pro/Growth-£179 tiers removed)
+- PRODUCT-MAP.md + pdf · **System Overview manual EN + TH** (+ website now "£200 build + £5/mo") · Sales-Email-Templates · Social onboarding runbook · `social/siamepos/BRAND.md` · memory
+
+**📨 MAYA — 🔴 before Tue 29 Sep 11:00 (Mint's Growth launch post): `client/Website/social.html` is LIVE with £39. Seven spots, then manual deploy:**
+1. The 3 meta descriptions (description / og / twitter): "£39/month." → "£79/month."
+2. EN hero (l.233): "£39/month." → "£79/month."
+3. TH hero (l.234): "£39/เดือน" → "£79/เดือน"
+4. Package price (l.274): `&pound;39` → `&pound;79`
+5. EN bundle line (l.~291): "Bundle with any SiamEPOS plan and get £10/month off — one invoice, one system. 3-month minimum." → "Growth bundle: SiamEPOS + social media for £138/month on the Founder's Rate, with website hosting and set-up free — one invoice, one system. 3-month minimum on social."
+6. TH bundle line (l.~292): "จับคู่กับแผน SiamEPOS ลด £10/เดือน — บิลเดียว ระบบเดียว ขั้นต่ำ 3 เดือน" → "แพ็กเกจ Growth: ระบบ SiamEPOS + โซเชียลมีเดีย £138/เดือน ในราคาผู้ก่อตั้ง พร้อมโฮสติ้งเว็บไซต์และค่าเริ่มต้นฟรี — บิลเดียว ระบบเดียว ขั้นต่ำ 3 เดือนสำหรับโซเชียล"
+
+(Optional, your call: the package list still lacks the 25 Sep scope, i.e. 4 Google posts, review-reply drafts and the listing check.)
+
+**📨 MINT:**
+- The Tue 29 Sep launch post must not show £98 or £39.
+- Re-render the old social cards before any reuse: `marketing/cards/product-social.html`, `photolead-product-social.html`, `social-CAPTION.txt` (all £39).
+
+**📨 KRIT / POSE:** when the first Growth client signs, the ops plan catalogue / Stripe needs £138 (and £79 social) prices.
+**📨 KORAKOT:** the Thann Thai owner draft (`social/thann-thai/_owner-message-DRAFT.md`) offered £39 standard / **£29 bundled**. What did Thann Thai actually agree? Nick's rule: current terms stand until the term ends, then give notice.
+**Left as history (dated, not rewritten):** transcripts, published July/Aug posts, old tickets. **Nick still owes a refresh of** Forecast v5, the Business Plan and the Investor Teaser (social £79, Growth £138, hardware margin).
+
+
 ### ⚖️ Sat 26 Sep — SEPOS-SEC-DATAFILES-001: Nick's GDPR ASSESSMENT DONE (answering Krit's 23 Sep row) · 📨 KRIT + KORAKOT
 Breach record (no personal data in it): `~/Documents/SiamEPOS-Docs/qa-reports/Incident-SEPOS-SEC-DATAFILES-2026-09-23.md` (+ .pdf).
 **Provisional:** on what's confirmed (contact details of ~30 people, no confirmed health data, no confirmed working password) it's **NOT reportable to the ICO, but it IS recorded** (Art 33(5)). Awareness recorded honestly as **25 Jul** for the chat export.

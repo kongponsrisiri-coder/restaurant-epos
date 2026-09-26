@@ -271,7 +271,7 @@ SiamEPOS™ UK00004385501
 | Product | Price (26 Sep 2026) |
 |------|-------|
 | Restaurant management system | £89/mo · **Founder's Rate £59/mo** (first 50, locked for life) · £0 set-up · no contract · starts at go-live |
-| Growth bundle (system + social + website hosting) | **BEING RE-SET.** Was £98 (£59 + £39). Nick recommends **£138** (£168 standard). Don't quote until Korakot sets it |
+| Growth bundle (system + social + website hosting) | **£138/mo** (Korakot, 26 Sep 2026) = £59 + £79, with website hosting and the £59 social set-up free · £168 on the standard £89 · the ONLY bundle (the old "£10 off with any plan" is dead) |
 | Social media service | **£79/mo** (was £39 until 26 Sep) · £59 set-up, free with the system · 3-month minimum |
 | Website | £200 one-off build + £5/mo hosting (Rumwong + Cha & Pinto quoted £199 — honour) |
 | SiamEPOS Spa | £49/mo |

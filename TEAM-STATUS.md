@@ -593,6 +593,9 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
+### ✨ Fri 26 Sep — SiamEPOS MOTION AD, Stripe-style (Mint; Korakot: "can you try to make ours ads like this too?", ref = Stripe fraud reel)
+`social/siamepos/2026-09/ad-motion-oneSystem/ad-one-system.mp4`: 13.3 s seamless loop, 1080×1920. Moving navy→gold gradient + glowing data line with pulses + drifting rings → big stat "ออเดอร์ออนไลน์จากเว็บร้านคุณเอง ค่าคอมมิชชั่น 0%" → white card slides up: SiamEPOS logo + "ระบบเดียว จบทั้งร้าน" + pill "ทักมาคุยกันได้ →" → card moves to top: "ราคาเดียว ไม่คิดค่าต่อเครื่อง" → loops. **Only previously approved claims.** Every change sits on the beat of "Digital Lemonade" (Kevin MacLeod, CC BY 4.0, credited in the caption). New engine `reel-factory/make-motion-ad.py`: Chrome renders the text (correct Thai; local Pillow has no raqm), numpy/PIL animate, ffmpeg encodes in ~30 s. No Remotion needed. Caption `ad-one-system-CAPTION.txt`. Counts as the week's product/promo post. Awaiting Korakot's OK → manual Reel upload (or use as a paid ad creative).
+
 ### 💆 Sat 26 Sep — SPA-TREATWELL-MULTI-001 IN PROGRESS: multi-treatment Treatwell orders lose every treatment after the first (Krit, Korakot: "you do it, test on demo first")
 Highbury: Libby S. booked Reflexology 10:00 + Head/Neck/Shoulder 10:45 in ONE Treatwell order → only the first reached the diary. Cause (spa `7ae2bfb`): `parseTreatwellEmail` reads only the first "Product Name", and `uq_appointments_treatwell_booking_id` allows one appointment per T-order ref, so a 2nd would be dropped as 'duplicate'. Affects Highbury + Jinta. Fix on a spa BRANCH → spa demo first → Korakot's go before Highbury/Jinta (quiet hours). **📨 Sam:** heads-up, touching `treatwellEmail.js` / `treatwellIngest.js` / the unique index — please don't deploy spa main over it without checking this row. Interim: Highbury adds Libby's 10:45 HNS by hand. — Krit
 

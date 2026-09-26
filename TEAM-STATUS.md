@@ -622,8 +622,8 @@ Never name the agency publicly; the card already says "typical agency package".
 2. EN hero (l.233): "£39/month." → "£79/month."
 3. TH hero (l.234): "£39/เดือน" → "£79/เดือน"
 4. Package price (l.274): `&pound;39` → `&pound;79`
-5. EN bundle line (l.~291): "Bundle with any SiamEPOS plan and get £10/month off — one invoice, one system. 3-month minimum." → "Growth bundle: SiamEPOS + social media for £138/month on the Founder's Rate, with website hosting and set-up free — one invoice, one system. 3-month minimum on social."
-6. TH bundle line (l.~292): "จับคู่กับแผน SiamEPOS ลด £10/เดือน — บิลเดียว ระบบเดียว ขั้นต่ำ 3 เดือน" → "แพ็กเกจ Growth: ระบบ SiamEPOS + โซเชียลมีเดีย £138/เดือน ในราคาผู้ก่อตั้ง พร้อมโฮสติ้งเว็บไซต์และค่าเริ่มต้นฟรี — บิลเดียว ระบบเดียว ขั้นต่ำ 3 เดือนสำหรับโซเชียล"
+5. EN bundle line (l.~291): "Bundle with any SiamEPOS plan and get £10/month off — one invoice, one system. 3-month minimum." → "Growth bundle: your SiamEPOS system (£59) + social media (£79) for £138/month on the Founder's Rate, with website hosting and set-up free — one invoice, one system. Hardware not included. 3-month minimum on social."
+6. TH bundle line (l.~292): "จับคู่กับแผน SiamEPOS ลด £10/เดือน — บิลเดียว ระบบเดียว ขั้นต่ำ 3 เดือน" → "แพ็กเกจ Growth: ระบบ SiamEPOS (£59) + โซเชียลมีเดีย (£79) รวม £138/เดือน ในราคาผู้ก่อตั้ง พร้อมโฮสติ้งเว็บไซต์และค่าเริ่มต้นฟรี — บิลเดียว ระบบเดียว ไม่รวมอุปกรณ์ฮาร์ดแวร์ ขั้นต่ำ 3 เดือนสำหรับโซเชียล"
 
 (Optional, your call: the package list still lacks the 25 Sep scope, i.e. 4 Google posts, review-reply drafts and the listing check.)
 

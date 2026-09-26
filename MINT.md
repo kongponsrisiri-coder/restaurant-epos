@@ -101,7 +101,7 @@ Template: `social/reel-factory/templates/poster-premium.html` (first use: `socia
 5. **Service icons** (Dine in · Takeaway · Delivery): only the ones that are TRUE (FACTS.md).
 6. **Info footer ON the image**: address · phone · gold pill CTA, so no caption is needed to act.
 7. Finishing: thin gold rules, one script accent (their sign-off), a spaced vertical tagline in a corner.
-Guardrails: real photos only (their posts look AI-edited, which we don't copy); the CTA must be true ("CALL TO BOOK" until online booking/ordering is live on their site); gold-gradient serif is Latin-only, and Thai never goes in gradient text (rule 11).
+**Layout rule (Korakot's v2 catch, same day):** find where the FOOD sits in the photo first and keep it clear; stack the text over the soft/blurred part (usually the top) and anchor the photo with `background-position` so the hero plate sits just above the footer. Never let the headline or fade cover the dish. Guardrails: real photos only (their posts look AI-edited, which we don't copy); the CTA must be true ("CALL TO BOOK" until online booking/ordering is live on their site); gold-gradient serif is Latin-only, and Thai never goes in gradient text (rule 11).
 
 ## 🤝 CLIENT ONBOARDING — adding a new social client's Facebook Page
 **Full runbook: `~/Documents/SiamEPOS-Docs/manuals/SiamEPOS-Social-Client-Onboarding-Runbook.md` (+ .pdf).** The short version:

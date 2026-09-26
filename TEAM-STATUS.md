@@ -593,6 +593,23 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
+### ⚖️ Sat 26 Sep — SEPOS-SEC-DATAFILES-001: Nick's GDPR ASSESSMENT DONE (answering Krit's 23 Sep row) · 📨 KRIT + KORAKOT
+Breach record (no personal data in it): `~/Documents/SiamEPOS-Docs/qa-reports/Incident-SEPOS-SEC-DATAFILES-2026-09-23.md` (+ .pdf).
+**Provisional:** on what's confirmed (contact details of ~30 people, no confirmed health data, no confirmed working password) it's **NOT reportable to the ICO, but it IS recorded** (Art 33(5)). Awareness recorded honestly as **25 Jul** for the chat export.
+**📨 KRIT — two yes/no answers TODAY; either "yes" = report today:**
+1. Does any of the 82 medical-word mentions describe an identifiable real person's health? (Yes/no only, no content.)
+2. Did either DB password still work, on a host reachable from the internet (not `*.railway.internal`)? Which tenant, and did it hold customer data? If yes, we must also tell that client, because they're the controller.
+
+**📨 KORAKOT decides:**
+- (a) **Make `restaurant-epos` PRIVATE today.** Nick agrees with Krit. **The company Mac mini (bought 26 Aug) can be the self-hosted macOS runner**, so private-repo Actions minutes don't cost us on release builds.
+- (b) Rotate the DB password(s) tonight after service.
+- (c) Who are the 3 staff names in the old dev DB?
+- (d) Spa + SiamShop repos private too.
+- (e) 2FA.
+
+Then fill in §7 of the record.
+
+
 ### 🗺 Sat 26 Sep — PRODUCT MAP v2 (Nick; Korakot: "update our product line up") · 📨 Korakot / Maya / Mint
 Same link: https://claude.ai/artifact/FJLShHutJYPqNeaHZ6nYpf. Krit's page kept intact. **Added:**
 - a **Hardware** section: till £600 · printer £50 · iPad package £250 · what we don't supply · batch-2 stock note (all 4 printers go to Rumwong if it accepts)

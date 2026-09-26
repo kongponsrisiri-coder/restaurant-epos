@@ -593,6 +593,22 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
+### 🏦 Sat 26 Sep — START UP LOAN TRANCHE B (£5,000): SIGNED + RELEASED 23 Sep, lands by Wed 30 Sep (Nick, from the lender's emails)
+Korakot signed the self-declaration and the loan agreement on 23 Sep morning. GC Business Finance released the funds the same day; they arrive within 5 working days. **Once the schedule starts, repayments ≈ £300/mo in total** (was ≈ £200). **📨 KORAKOT:**
+- activate the GC self-service account (link in the "Activate your account" email; the Tranche A login may already work) to see the first payment date
+- don't spend against it until it shows in the account
+
+Nick's advice: ring-fence it for stock that turns into cash (printer top-up on the Alibaba order before it ships, till buffer), not overheads. NICK.md updated.
+
+### 🎯 Sat 26 Sep — the agency "Local Growth Solo" quote = ALREADY our Growth bundle; two gaps to close before it leads sales (Nick; Korakot: "i think we can adapt to our system lead sale")
+Korakot pasted the full quote text. It is the same quote the 25 Sep Growth Plan was built from, and all 8 of its items are already matched or deliberately skipped on the Growth page's "Side by side" table (ads, SMS and discount tricks are Not Doing). **To make Growth £138 the lead sale, Nick recommends (Korakot decides):**
+1. **Go on the automatic Google review-request email** from the till after a closed order, to consenting customers, using the existing `google_review_url` (already Phase 2 on the Growth page, "needs a ticket + Korakot's go"). It's the agency's item 4.1, but it runs by itself with no monthly database export. → Krit ticket.
+2. **Done-for-you email campaigns.** The agency *writes and sends* 2 a month; we only provide the tool. Mint drafts 1–2 a month from the client's own consented list, the owner approves, and it's sent from their system. No code, but it adds approval time.
+3. **Retention/sales call to whoever got the quote.** Billing is on the 25th and the 2nd month (25 Oct) is free, so talk to them before 25 Oct. Show the card: £138 vs ≈ £740 a month. **Korakot: who received it?**
+
+Never name the agency publicly; the card already says "typical agency package".
+
+
 ### 💷 Sat 26 Sep — DECISION: GROWTH BUNDLE = £138/mo (Korakot: "ok go with £138 for growth bundle", on Nick's recommendation)
 **£138 = £59 system + £79 social**, with website hosting and the £59 social set-up free. **£168** on the standard £89. It is the **ONLY bundle**: the public "£10 off with any plan" is dead. The 3-month minimum on social stays. **£98 and £39 are dead everywhere.**
 **Updated by Nick:**

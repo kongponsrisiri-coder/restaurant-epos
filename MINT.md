@@ -87,6 +87,8 @@ SiamEPOS is an **ERP for Thai *businesses* in the UK — NOT just restaurants.**
 
 ---
 
+**🌐 WEBSITE IN EVERY CLIENT CAPTION (Korakot, 26 Sep: "you should put the website too").** Add the client's own site on its own line next to the phone (`🌐 thannthai.co.uk`, `🌐 highburythaimassage.com`). Take the URL from their Facebook page's `website` field and curl it for a 200 before use. Never a mockup / netlify / pages.dev URL.
+
 ## 🍽 CLIENT-PAGE CONTENT RULES (Korakot, 2026-09-22 — on the first Thann Thai batch: "not only the food menu, no need to mention the price")
 1. **No prices on client posts** unless the owner asks for them. The page sells the *experience*; the menu sells the dishes.
 2. **Not a menu board.** Rotate themes across the month: 🌧 weather/season (dark evenings, first frost, heatwave) · 🎃 occasion/festival (Halloween, clocks change, Bonfire Night, Christmas parties, Songkran, Loy Krathong, Mother's Day) · 🌿 **one "benefit of Thai food / ingredients" post per month** (lemongrass, galangal, chilli, turmeric, holy basil — traditional wisdom + widely-known facts, never medical claims) · 📖 story (heritage, handmade, the chefs) · 🕠 rhythm (lunch, late nights, Sunday).

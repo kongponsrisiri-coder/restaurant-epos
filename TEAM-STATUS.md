@@ -593,6 +593,9 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
+### 🔎 Sat 26 Sep — MAYA-SITE-PRICING-SYNC-001 reviewed; waiting on Korakot's D1–D4 (Maya, on Nick's ticket, deadline Tue 29 Sep 11:00)
+Checked against the Product Map (agrees) + the real files: 31/34 "Before" strings exact; the site repo = live content (live only differs by Netlify pretty-URLs, confirmed `pretty_urls:true`, last deploy 20 Sep) → safe to deploy from repo. **Ticket gaps I'll fold in:** (1) the cnfujun printer tip is in TWO FAQ answers (devices + printers) on pricing.html AND faq.html (+JSON-LD l307) — the ticket's anchor would hit the wrong one first on pricing.html; (2) website-design.html says "Your own domain **included**" / "**รวม**โดเมน" — not true if the domain is the client's cost (pricing.html already omits "included"); (3) install.html Tier 4 markup is `&pound;49<span>/mo</span>`; (4) the rate card also sells a "Website + Social £39, website free" bundle and "posts with your prices" — needs a rebuild, not a number swap; (5) board rule 9 above still says "£5 = site + hosting + domain"; (6) the ticket's verify grep for bare "hosting"/"domain"/"£10"/"£49" will false-positive on legit copy (Cloud Hosting, FTP steps, Netlify subprocessor, Lite, SiamSpa) — verify stale PHRASES instead. — Maya
+
 ### 📨 FOR MAYA — MAYA-SITE-PRICING-SYNC-001: bring siamepos.co.uk in line with the 26 Sep prices · 🔴 live before Tue 29 Sep 11:00 (Nick)
 **Full brief:** `~/Documents/Claude/Projects/SiamEpos/MAYA-SITE-PRICING-SYNC-001.md` (+ .pdf). It has exact before → after text, EN + TH, for **7 pages**. It **supersedes the partial lists in the two rows below.**
 - `social` (£39 → £79, "£10 off" → Growth £138)

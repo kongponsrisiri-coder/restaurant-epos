@@ -593,6 +593,25 @@ Nick's additions (change if wrong): card fees are Stripe's, paid to their own St
 
 ## 🟢 Active Work
 
+### 💷 Sat 26 Sep — DECISION: the £5/mo is the WEBSITE UPKEEP service; WEBSITE HOSTING IS THE CLIENT'S OWN COST (Korakot: "Website hosting, its client cost, that £5 is website upkeep service")
+So Growth £138 = £59 system + £79 social, **with the £5 upkeep free**. Hosting is not included. **Fixed by Nick** everywhere we control:
+- the product map (v5) and the Growth page (v7), with the card re-rendered: "website upkeep included"
+- NICK/MINT/MAYA.md and PRODUCT-MAP.md + pdf
+- the System Overview manual EN + TH ("£5 per month for upkeep … hosting is paid by you")
+- the sales templates, BRAND.md and memory
+
+The EPOS system's own cloud hosting ("Cloud Hosting & Backups" on pricing.html) is a different thing and stays included in the subscription.
+**📨 MAYA — 🔴 the public site says the opposite:**
+- `website-design.html`: 3 meta descriptions "Hosting, domain and updates for £5 a month"; the price line "website, hosting, domain & updates"; the list item "Hosting, updates & support all managed for you"; the body "Then £5 a month for hosting, domain and updates", all EN + TH
+- `pricing.html`: the website card "website, hosting, domain & updates" and "Hosting, updates & support all managed", EN + TH
+- `faq.html`: "then £5 a month — hosting, your own domain and updates all included", EN + TH + the FAQPage JSON-LD
+
+Rewrite them as "£5 a month website upkeep; hosting is your own cost". **Wait for Korakot's answer on the DOMAIN first** (below), then do all three with `social.html`'s £39 in one manual deploy.
+**📨 KORAKOT, two questions:**
+1. **Is the domain also the client's own cost?** The public copy says the £5 includes it.
+2. **Have Q-2026-001 Rev 1 (Rumwong) and Q-2026-002 (Cha & Pinto) gone out?** Both list "Website kept online and updated" inside the monthly fee. If not sent, Nick reissues them with "website upkeep"; if sent, Nick recommends honouring them (our hosting costs about £0).
+
+
 ### 🏦 Sat 26 Sep — START UP LOAN TRANCHE B (£5,000): SIGNED + RELEASED 23 Sep, lands by Wed 30 Sep (Nick, from the lender's emails)
 Korakot signed the self-declaration and the loan agreement on 23 Sep morning. GC Business Finance released the funds the same day; they arrive within 5 working days. **Once the schedule starts, repayments ≈ £300/mo in total** (was ≈ £200). **📨 KORAKOT:**
 - activate the GC self-service account (link in the "Activate your account" email; the Tranche A login may already work) to see the first payment date
@@ -610,7 +629,7 @@ Never name the agency publicly; the card already says "typical agency package".
 
 
 ### 💷 Sat 26 Sep — DECISION: GROWTH BUNDLE = £138/mo (Korakot: "ok go with £138 for growth bundle", on Nick's recommendation)
-**£138 = £59 system + £79 social**, with website hosting and the £59 social set-up free. **£168** on the standard £89. It is the **ONLY bundle**: the public "£10 off with any plan" is dead. The 3-month minimum on social stays. **£98 and £39 are dead everywhere.**
+**£138 = £59 system + £79 social**, with the £5 website upkeep and the £59 social set-up free (hardware, website build and website hosting NOT included). **£168** on the standard £89. It is the **ONLY bundle**: the public "£10 off with any plan" is dead. The 3-month minimum on social stays. **£98 and £39 are dead everywhere.**
 **Updated by Nick:**
 - product map v3: https://claude.ai/artifact/FJLShHutJYPqNeaHZ6nYpf
 - Growth team page v6: https://claude.ai/artifact/GpnHHX7d9oMeEvxigwdQtG, with the comparison card **re-rendered at £138** (`~/Documents/Claude/Projects/SiamEpos/growth-plan/SiamEPOS-Growth-vs-Agency-card.png`; the old one is kept as `-v1-98`)
@@ -622,8 +641,8 @@ Never name the agency publicly; the card already says "typical agency package".
 2. EN hero (l.233): "£39/month." → "£79/month."
 3. TH hero (l.234): "£39/เดือน" → "£79/เดือน"
 4. Package price (l.274): `&pound;39` → `&pound;79`
-5. EN bundle line (l.~291): "Bundle with any SiamEPOS plan and get £10/month off — one invoice, one system. 3-month minimum." → "Growth bundle: your SiamEPOS system (£59) + social media (£79) for £138/month on the Founder's Rate, with website hosting and set-up free — one invoice, one system. Hardware not included. 3-month minimum on social."
-6. TH bundle line (l.~292): "จับคู่กับแผน SiamEPOS ลด £10/เดือน — บิลเดียว ระบบเดียว ขั้นต่ำ 3 เดือน" → "แพ็กเกจ Growth: ระบบ SiamEPOS (£59) + โซเชียลมีเดีย (£79) รวม £138/เดือน ในราคาผู้ก่อตั้ง พร้อมโฮสติ้งเว็บไซต์และค่าเริ่มต้นฟรี — บิลเดียว ระบบเดียว ไม่รวมอุปกรณ์ฮาร์ดแวร์ ขั้นต่ำ 3 เดือนสำหรับโซเชียล"
+5. EN bundle line (l.~291): "Bundle with any SiamEPOS plan and get £10/month off — one invoice, one system. 3-month minimum." → "Growth bundle: your SiamEPOS system (£59) + social media (£79) for £138/month on the Founder's Rate, with website upkeep and set-up free — one invoice, one system. Hardware and website hosting not included. 3-month minimum on social."
+6. TH bundle line (l.~292): "จับคู่กับแผน SiamEPOS ลด £10/เดือน — บิลเดียว ระบบเดียว ขั้นต่ำ 3 เดือน" → "แพ็กเกจ Growth: ระบบ SiamEPOS (£59) + โซเชียลมีเดีย (£79) รวม £138/เดือน ในราคาผู้ก่อตั้ง พร้อมค่าดูแลเว็บไซต์และค่าเริ่มต้นฟรี — บิลเดียว ระบบเดียว ไม่รวมอุปกรณ์ฮาร์ดแวร์และค่าโฮสติ้งเว็บไซต์ ขั้นต่ำ 3 เดือนสำหรับโซเชียล"
 
 (Optional, your call: the package list still lacks the 25 Sep scope, i.e. 4 Google posts, review-reply drafts and the listing check.)
 

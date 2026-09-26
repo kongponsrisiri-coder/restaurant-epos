@@ -271,9 +271,9 @@ SiamEPOS™ UK00004385501
 | Product | Price (26 Sep 2026) |
 |------|-------|
 | Restaurant management system | £89/mo · **Founder's Rate £59/mo** (first 50, locked for life) · £0 set-up · no contract · starts at go-live |
-| Growth bundle (system + social + website hosting) | **£138/mo** (Korakot, 26 Sep 2026) = £59 + £79, with website hosting and the £59 social set-up free · £168 on the standard £89 · the ONLY bundle (the old "£10 off with any plan" is dead) |
+| Growth bundle (system + social + website upkeep) | **£138/mo** (Korakot, 26 Sep 2026) = £59 system + £79 social, with the £5 website upkeep and the £59 social set-up free · NOT included: hardware, £200 website build, website hosting (client's own cost), card fees · £168 on the standard £89 · the ONLY bundle (the old "£10 off with any plan" is dead) |
 | Social media service | **£79/mo** (was £39 until 26 Sep) · £59 set-up, free with the system · 3-month minimum |
-| Website | £200 one-off build + £5/mo hosting (Rumwong + Cha & Pinto quoted £199 — honour) |
+| Website | £200 one-off build + **£5/mo website UPKEEP service** · hosting = the client's own cost (Korakot, 26 Sep) · Rumwong + Cha & Pinto quoted £199 — honour |
 | SiamEPOS Spa | £49/mo |
 | SiamShop | £89/mo (first quote: Cha & Pinto Box, Q-2026-002) |
 | SiamPay | 1.5% + 30p per UK card; our share 10p per payment |
@@ -291,10 +291,11 @@ SiamEPOS™ UK00004385501
   free install + near-daily site visits is the single largest cost in the business
   today. See Forecast v5 §"Remote install is now a commercial milestone".
   *(Supersedes the old £149–299 setup fee — do NOT quote it.)*
-- **Website Service: £5/month** — website + hosting + the client's own
-  domain (registered in THEIR name) + updates. The one-off build is
-  **quoted case by case** — never quote a public build price.
-  Same £5/mo to take over a site the client already has.
+- **Website: £200 one-off build + £5/month website UPKEEP service**
+  (Korakot, 26 Sep 2026: the £5 is upkeep; **hosting is the client's own
+  cost**). Domain registered in THEIR name. The £200 build has been public
+  since 14 Sep. Same £5/mo upkeep to take over a site the client already has.
+  *(26 Sep supersedes the 20 Jul wording "website + hosting + domain + updates".)*
   *(Korakot's call 2026-07-20 — supersedes the old £199 one-off and the
   £299/£499/£799 Starter/Full/Premium tiers, both now dead.)*
 - Social Media Service: **£79/month** managed (Facebook + Instagram) — raised from £39 on 26 Sep 2026
